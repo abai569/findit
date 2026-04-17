@@ -29,11 +29,18 @@ jobs:
       - name: Install dependencies
         run: |
           flutter pub get
+          flutter precache
           cd android
           chmod +x gradlew
       
       - name: Build APK
-        run: flutter build apk --release --verbose
+        run: |
+          flutter build apk --release --verbose 2>&1 | tee build.log
+          if [ $? -ne 0 ]; then
+            echo "Build failed. Showing last 100 lines of log:"
+            tail -n 100 build.log
+            exit 1
+          fi
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
