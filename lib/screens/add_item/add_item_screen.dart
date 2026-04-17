@@ -194,7 +194,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
           value: null,
           child: Text('未分类'),
         ),
-        ...provider.categories.map<ItemCategory>((category) {
+        ...provider.categories.map((category) {
           return DropdownMenuItem<int>(
             value: category.id,
             child: Text('${category.icon} ${category.name}'),

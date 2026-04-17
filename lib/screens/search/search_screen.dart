@@ -126,7 +126,7 @@ class _SearchScreenState extends State<SearchScreen> {
               }
             },
           ),
-          ...provider.categories.map<ItemCategory>((category) {
+          ...provider.categories.map((category) {
             return FilterChip(
               label: Text('${category.icon} ${category.name}'),
               selected: _selectedCategoryId == category.id,
