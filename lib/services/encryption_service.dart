@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
 
@@ -23,7 +24,7 @@ class EncryptionService {
   Key _generateKey() {
     final bytes = utf8.encode('findit_app_key_2024_secure_password');
     final hash = sha256.convert(bytes);
-    return Key(hash.bytes);
+    return Key(Uint8List.fromList(hash.bytes));
   }
 
   IV _generateIV() {
@@ -64,7 +65,7 @@ class EncryptionService {
   List<int> decryptBytes(List<int> encrypted) {
     try {
       final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
-      final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+      final decrypted = encrypter.decryptBytes(Encrypted(Uint8List.fromList(encrypted)), iv: iv);
       return decrypted;
     } catch (e) {
       throw Exception('字节解密失败：$e');
