@@ -15,7 +15,7 @@ dependencies:
   path: ^1.8.3
   
   # WebDAV
-  webdav_client: ^1.2.4
+  webdav_client: ^1.2.2
   
   # 图片处理
   image_picker: ^1.0.4
