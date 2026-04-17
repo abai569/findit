@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
 
@@ -8,38 +7,67 @@ class EncryptionService {
   factory EncryptionService() => _instance;
   EncryptionService._internal();
 
-  Key get _key {
-    final bytes = utf8.encode('findit_app_key_findit_backup_salt_2024');
-    final hash = sha256.convert(bytes);
-    return Key(Uint8List.fromList(hash.bytes));
+  Key? _key;
+  IV? _iv;
+
+  Key get key {
+    _key ??= _generateKey();
+    return _key!;
   }
 
-  IV get _iv {
-    final ivBytes = utf8.encode('findit_iv_16bytes!');
-    return IV(ivBytes);
+  IV get iv {
+    _iv ??= _generateIV();
+    return _iv!;
+  }
+
+  Key _generateKey() {
+    final bytes = utf8.encode('findit_app_key_2024_secure_password');
+    final hash = sha256.convert(bytes);
+    return Key(hash.bytes);
+  }
+
+  IV _generateIV() {
+    final bytes = utf8.encode('findit_iv_16byte');
+    return IV(Uint8List.fromList(bytes));
   }
 
   String encrypt(String plain) {
-    final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
-    final encrypted = encrypter.encrypt(plain, iv: _iv);
-    return encrypted.base64;
+    try {
+      final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      final encrypted = encrypter.encrypt(plain, iv: iv);
+      return encrypted.base64;
+    } catch (e) {
+      throw Exception('加密失败：$e');
+    }
   }
 
   String decrypt(String encrypted) {
-    final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
-    final decrypted = encrypter.decrypt64(encrypted, iv: _iv);
-    return decrypted;
+    try {
+      final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      final decrypted = encrypter.decrypt64(encrypted, iv: iv);
+      return decrypted;
+    } catch (e) {
+      throw Exception('解密失败：$e');
+    }
   }
 
   List<int> encryptBytes(List<int> bytes) {
-    final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
-    final encrypted = encrypter.encryptBytes(bytes, iv: _iv);
-    return encrypted.bytes;
+    try {
+      final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      final encrypted = encrypter.encryptBytes(bytes, iv: iv);
+      return encrypted.bytes;
+    } catch (e) {
+      throw Exception('字节加密失败：$e');
+    }
   }
 
   List<int> decryptBytes(List<int> encrypted) {
-    final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
-    final decrypted = encrypter.decryptBytes(Encrypted(Uint8List.fromList(encrypted)), iv: _iv);
-    return decrypted;
+    try {
+      final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+      return decrypted;
+    } catch (e) {
+      throw Exception('字节解密失败：$e');
+    }
   }
 }

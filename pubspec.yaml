@@ -1,7 +1,7 @@
 name: wuping_guanjia
 description: 物品定位记录应用 - 记录物品位置，快速查找
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
