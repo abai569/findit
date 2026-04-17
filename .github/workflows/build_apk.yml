@@ -1,14 +1,71 @@
-name: Build Flutter APK
+name: Build and Release APK
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+env:
+  APP_NAME: 物品管家
+  VERSION: 1.0.0
+
 jobs:
-  build:
+  # Job 1: 检查版本和准备环境
+  check-version:
+    name: Check Version & Setup
     runs-on: ubuntu-latest
-    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | cut -d'+' -f1 | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true
+
+  # Job 2: 安装依赖
+  install-deps:
+    name: Install Dependencies
+    runs-on: ubuntu-latest
+    needs: check-version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Precache fonts
+        run: flutter precache
+
+  # Job 3: 构建 APK
+  build-apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    needs: [check-version, install-deps]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,32 +81,63 @@ jobs:
         with:
           flutter-version: '3.19.0'
           channel: 'stable'
-          cache: true
       
-      - name: Install dependencies
+      - name: Build Release APK
+        run: flutter build apk --release
+      
+      - name: Verify APK
         run: |
-          flutter pub get
-          flutter precache
-          cd android
-          chmod +x gradlew
+          echo "APK Information:"
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
+          echo "File size: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)"
       
-      - name: Build APK
-        run: |
-          flutter build apk --release
-          echo "Build completed. Searching for APK files..."
-          find build -name "*.apk" -type f
-          echo "Listing build outputs:"
-          ls -la build/app/outputs/
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+
+  # Job 4: 创建 Release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [check-version, build-apk]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: Upload to Release
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+          path: ./release
+      
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: 物品管家 v${{ github.run_number }}
-          tag_name: v${{ github.run_number }}
-          files: build/app/outputs/**/*.apk
+          name: ${{ env.APP_NAME }} v${{ needs.check-version.outputs.version }}
+          tag_name: v${{ needs.check-version.outputs.version }}-${{ github.run_number }}
+          files: ./release/app-release.apk
           generate_release_notes: true
           body: |
-            ## 更新内容
-            - 自动构建版本 ${{ github.run_number }}
+            ## 📱 ${{ env.APP_NAME }}
+            
+            ### 版本信息
+            - 版本号：v${{ needs.check-version.outputs.version }}
+            - 构建号：#${{ github.run_number }}
             - 构建时间：${{ github.event.head_commit.timestamp }}
-            - 提交信息：${{ github.event.head_commit.message }}
+            
+            ### 更新内容
+            ${{ github.event.head_commit.message }}
+            
+            ### 安装说明
+            1. 下载 `app-release.apk`
+            2. 传输到 Android 手机
+            3. 打开安装即可
+            
+            ### 系统要求
+            - Android 5.0+
+            - 建议 Android 10+
