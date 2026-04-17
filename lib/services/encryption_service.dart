@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
-import 'package:crypto/pbkdf2.dart';
 
 class EncryptionService {
   static final EncryptionService _instance = EncryptionService._internal();
@@ -10,14 +9,9 @@ class EncryptionService {
   EncryptionService._internal();
 
   Key get _key {
-    final keyBytes = pbkdf2(
-      sha256,
-      utf8.encode('findit_app_key'),
-      1000,
-      32,
-      utf8.encode('findit_backup_salt_2024'),
-    );
-    return Key(keyBytes);
+    final bytes = utf8.encode('findit_app_key_findit_backup_salt_2024');
+    final hash = sha256.convert(bytes);
+    return Key(hash.bytes);
   }
 
   IV get _iv {

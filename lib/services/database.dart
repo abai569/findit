@@ -2,7 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/item.dart';
 import '../models/location.dart';
-import '../models/category.dart';
+import '../models/item_category.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -94,7 +94,7 @@ class DatabaseService {
       await db.insert('locations', loc);
     }
 
-    for (var cat in Category.getDefaults()) {
+    for (var cat in ItemCategory.getDefaults()) {
       await db.insert('categories', cat.toMap());
     }
   }
@@ -178,10 +178,10 @@ class DatabaseService {
     return maps.map((map) => Item.fromMap(map)).toList();
   }
 
-  Future<List<Category>> getAllCategories() async {
+  Future<List<ItemCategory>> getAllCategories() async {
     final db = await database;
     final maps = await db.query('categories');
-    return maps.map((map) => Category.fromMap(map)).toList();
+    return maps.map((map) => ItemCategory.fromMap(map)).toList();
   }
 
   Future<void> updateSyncMetadata({

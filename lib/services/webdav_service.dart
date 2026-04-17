@@ -96,7 +96,7 @@ class WebDAVService {
   Future<String> _generateBackupFileName(int version) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final deviceId = await _getDeviceId();
-    return 'findit_backup_v${version}_$deviceId_$timestamp.zip.enc';
+    return 'findit_backup_v${version}_${deviceId}_$timestamp.zip.enc';
   }
 
   Future<String> _getDeviceId() async {
@@ -263,14 +263,15 @@ class WebDAVService {
     // Decrypt
     final decrypted = _encryption.decryptBytes(encryptedBytes);
     
-    final tempFile = await File.systemTemp.createTemp('findit_decrypt_');
+    final tempDir = await Directory.systemTemp.createTemp('findit_decrypt_');
+    final tempFile = File('${tempDir.path}/encrypted.zip');
     await tempFile.writeAsBytes(decrypted);
     
     final extractDir = await Directory.systemTemp.createTemp('findit_restored_');
     
     // Unzip
     final result = await Process.run('unzip', ['-o', tempFile.path, '-d', extractDir.path]);
-    await tempFile.delete();
+    await tempDir.delete(recursive: true);
     
     if (result.exitCode != 0) {
       throw Exception('Failed to extract: ${result.stderr}');
