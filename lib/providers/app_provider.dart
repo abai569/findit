@@ -21,7 +21,7 @@ class AppProvider with ChangeNotifier {
 
   List<Item> get items => _items;
   List<Location> get locations => _locations;
-  List<Category> get categories => _categories;
+  List<ItemCategory> get categories => _categories;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasWebDAVConfig => _hasWebDAVConfig;

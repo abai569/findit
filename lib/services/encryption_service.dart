@@ -11,7 +11,7 @@ class EncryptionService {
   Key get _key {
     final bytes = utf8.encode('findit_app_key_findit_backup_salt_2024');
     final hash = sha256.convert(bytes);
-    return Key(hash.bytes);
+    return Key(Uint8List.fromList(hash.bytes));
   }
 
   IV get _iv {
