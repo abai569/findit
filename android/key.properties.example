@@ -1,0 +1,7 @@
+# 示例文件 - 实际使用时需要创建真实的签名文件
+# 调试版本可以不签名，此文件可选
+
+storePassword=android
+keyPassword=android
+keyAlias=upload
+storeFile=../upload-keystore.jks
