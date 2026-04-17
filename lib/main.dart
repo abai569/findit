@@ -5,6 +5,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const FindItApp());
 }
 
