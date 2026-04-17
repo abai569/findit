@@ -1,27 +1,22 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart';
 import 'package:crypto/crypto.dart';
+import 'package:crypto/pbkdf2.dart';
 
 class EncryptionService {
   static final EncryptionService _instance = EncryptionService._internal();
   factory EncryptionService() => _instance;
   EncryptionService._internal();
 
-  String get _password {
-    const salt = 'findit_backup_salt_2024';
-    const iterations = 1000;
-    final keyBytes = pbkdf2(
-      utf8.encode(salt),
-      utf8.encode('findit_app_key'),
-      iterations,
-      32,
-      sha256,
-    );
-    return base64Encode(keyBytes);
-  }
-
   Key get _key {
-    final keyBytes = base64Decode(_password);
+    final keyBytes = pbkdf2(
+      sha256,
+      utf8.encode('findit_app_key'),
+      1000,
+      32,
+      utf8.encode('findit_backup_salt_2024'),
+    );
     return Key(keyBytes);
   }
 
@@ -45,12 +40,12 @@ class EncryptionService {
   List<int> encryptBytes(List<int> bytes) {
     final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
     final encrypted = encrypter.encryptBytes(bytes, iv: _iv);
-    return encrypted;
+    return encrypted.bytes;
   }
 
   List<int> decryptBytes(List<int> encrypted) {
     final encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
-    final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
+    final decrypted = encrypter.decryptBytes(Encrypted(Uint8List.fromList(encrypted)), iv: _iv);
     return decrypted;
   }
 }

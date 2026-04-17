@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/item.dart';
 import '../models/location.dart';
-import '../models/category.dart';
+import '../models/category.dart' as app_models;
 import '../services/database.dart';
 import '../services/webdav_service.dart';
 import '../services/image_service.dart';
@@ -13,7 +13,7 @@ class AppProvider with ChangeNotifier {
 
   List<Item> _items = [];
   List<Location> _locations = [];
-  List<Category> _categories = [];
+  List<app_models.Category> _categories = [];
   bool _isLoading = false;
   String? _error;
   bool _hasWebDAVConfig = false;
@@ -191,7 +191,7 @@ class AppProvider with ChangeNotifier {
     if (categoryId == null) return null;
     final category = _categories.firstWhere(
       (c) => c.id == categoryId,
-      orElse: () => Category(name: '未分类', icon: '📦', color: '#607D8B'),
+      orElse: () => app_models.Category(name: '未分类', icon: '📦', color: '#607D8B'),
     );
     return category.name;
   }

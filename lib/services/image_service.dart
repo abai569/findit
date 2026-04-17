@@ -62,7 +62,7 @@ class ImageService {
         return await _fallbackCompress(imageFile, targetPath);
       }
 
-      return result;
+      return File(result.path);
     } catch (e) {
       return await _fallbackCompress(imageFile, targetPath);
     }
@@ -78,7 +78,9 @@ class ImageService {
       format: CompressFormat.jpeg,
     );
 
-    if (result != null) return result;
+    if (result != null) {
+      return File(result.path);
+    }
 
     return await imageFile.copy(targetPath);
   }

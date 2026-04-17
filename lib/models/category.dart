@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+
+@optionalTypeArgs
 class Category {
   final int? id;
   final String name;

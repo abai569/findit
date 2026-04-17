@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'dart:convert';
-import 'package:webdav_client/webdav_client.dart';
-import 'package:encrypt/encrypt.dart';
-import 'package:crypto/crypto.dart';
-import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
+import 'package:path_provider/path_provider.dart';
 import 'database.dart';
 import 'encryption_service.dart';
 
@@ -14,7 +11,7 @@ class WebDAVService {
   factory WebDAVService() => _instance;
   WebDAVService._internal();
 
-  Client? _client;
+  webdav.Client? _client;
   final DatabaseService _dbService = DatabaseService();
   final EncryptionService _encryption = EncryptionService();
 
@@ -64,7 +61,7 @@ class WebDAVService {
     await prefs.remove(_prefsKey);
   }
 
-  Future<Client> getClient() async {
+  Future<webdav.Client> getClient() async {
     if (_client != null) return _client!;
 
     final creds = await getCredentials();
@@ -72,13 +69,17 @@ class WebDAVService {
       throw Exception('WebDAV credentials not found');
     }
 
-    _client = newClient(
+    _client = webdav.newClient(
       creds['url']!,
       user: creds['username']!,
       password: creds['password']!,
     );
 
-    await _client!.mkdir(_backupDir);
+    try {
+      await _client!.mkdir(_backupDir);
+    } catch (e) {
+      // Directory might already exist
+    }
 
     return _client!;
   }
@@ -92,10 +93,10 @@ class WebDAVService {
     return metadata?['last_sync_version'] as int? ?? 0;
   }
 
-  Future<String> _generateBackupFileName(int version, bool isFull) async {
+  Future<String> _generateBackupFileName(int version) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final deviceId = await _getDeviceId();
-    return 'findit_backup_v${version}_$deviceId${isFull ? '_full' : '_incr'}_$timestamp.zip.enc';
+    return 'findit_backup_v${version}_$deviceId_$timestamp.zip.enc';
   }
 
   Future<String> _getDeviceId() async {
@@ -103,132 +104,110 @@ class WebDAVService {
     if (metadata?['device_id'] != null) {
       return metadata!['device_id'] as String;
     }
-    final deviceId = const Uuid().v4().substring(0, 8);
+    final deviceId = DateTime.now().millisecondsSinceEpoch.toString();
     await _dbService.updateSyncMetadata(deviceId: deviceId);
     return deviceId;
-  }
-
-  Future<Map<String, dynamic>> _getChangedItems(int sinceVersion) async {
-    final metadata = await _dbService.getSyncMetadata();
-    final lastBackupTime = metadata?['last_backup_time'] as String?;
-    
-    if (lastBackupTime == null) {
-      return {'full': true, 'items': await _dbService.getAllItems()};
-    }
-
-    final lastBackup = DateTime.parse(lastBackupTime);
-    final allItems = await _dbService.getAllItems();
-    final changedItems = allItems
-        .where((item) => item.updatedAt.isAfter(lastBackup))
-        .toList();
-
-    return {
-      'full': changedItems.length == allItems.length,
-      'items': changedItems,
-    };
   }
 
   Future<String> backup() async {
     final client = await getClient();
     final version = await _getBackupVersion();
-    final changes = await _getChangedItems(version);
-    final isFullBackup = changes['full'] as bool || version == 0;
-    final items = changes['items'] as List;
-
-    if (items.isEmpty && !isFullBackup) {
-      throw Exception('没有需要备份的变更');
-    }
-
     final backupVersion = version + 1;
-    final fileName = await _generateBackupFileName(backupVersion, isFullBackup);
+    final fileName = await _generateBackupFileName(backupVersion);
 
-    final tempDir = await _createBackupPackage(items, isFullBackup);
-    final encryptedPath = await _encryptBackupFile(tempDir.path);
-
-    final encryptedFile = File(encryptedPath);
-    final fileBytes = await encryptedFile.readAsBytes();
-
-    await client.writeBytes('$_backupDir/$fileName', fileBytes);
-
-    await _dbService.updateSyncMetadata(
-      lastBackupTime: DateTime.now().toIso8601String(),
-      lastSyncVersion: backupVersion,
-    );
-
-    await _dbService.addBackupHistory(
-      backupTime: DateTime.now().toIso8601String(),
-      backupVersion: backupVersion,
-      fileName: fileName,
-      fileSize: fileBytes.length,
-    );
-
-    await encryptedFile.delete();
-    await Directory(tempDir.path).delete(recursive: true);
-
-    await _cleanupOldBackups(client);
-
-    return fileName;
-  }
-
-  Future<Directory> _createBackupPackage(List items, bool isFull) async {
     final tempDir = await Directory.systemTemp.createTemp('findit_backup_');
     
-    final dbPath = await _dbService.database.then((db) => db.path);
-    final dbFile = File(dbPath);
-    
-    if (isFull) {
-      await dbFile.copy('${tempDir.path}/database.db');
+    try {
+      // Export data
+      final items = await _dbService.getAllItems();
+      final locations = await _dbService.getAllLocations();
+      final categories = await _dbService.getAllCategories();
+      final metadata = await _dbService.getSyncMetadata() ?? {};
+      
+      metadata['backup_time'] = DateTime.now().toIso8601String();
+      metadata['last_sync_version'] = backupVersion;
+
+      await File('${tempDir.path}/items.json').writeAsString(jsonEncode(items.map((i) => i.toMap()).toList()));
+      await File('${tempDir.path}/locations.json').writeAsString(jsonEncode(locations.map((l) => l.toMap()).toList()));
+      await File('${tempDir.path}/categories.json').writeAsString(jsonEncode(categories.map((c) => c.toMap()).toList()));
+      await File('${tempDir.path}/metadata.json').writeAsString(jsonEncode(metadata));
+
+      // Copy images
+      final imagesDir = Directory('${tempDir.path}/images');
+      await imagesDir.create();
+      final appDir = await getApplicationDocumentsDirectory();
+      final appImagesDir = Directory('${appDir.path}/images');
+      if (await appImagesDir.exists()) {
+        await _copyDirectory(appImagesDir, imagesDir);
+      }
+
+      // Zip and encrypt
+      final zipPath = await _createZip(tempDir.path);
+      final encryptedPath = await _encryptFile(zipPath);
+      final encryptedFile = File(encryptedPath);
+      final fileBytes = await encryptedFile.readAsBytes();
+
+      // Upload
+      await client.write('$_backupDir/$fileName', fileBytes);
+
+      // Update metadata
+      await _dbService.updateSyncMetadata(
+        lastBackupTime: DateTime.now().toIso8601String(),
+        lastSyncVersion: backupVersion,
+      );
+
+      await _dbService.addBackupHistory(
+        backupTime: DateTime.now().toIso8601String(),
+        backupVersion: backupVersion,
+        fileName: fileName,
+        fileSize: fileBytes.length,
+      );
+
+      // Cleanup
+      await encryptedFile.delete();
+      await File(zipPath).delete();
+      await tempDir.delete(recursive: true);
+
+      await _cleanupOldBackups(client);
+
+      return fileName;
+    } catch (e) {
+      await tempDir.delete(recursive: true);
+      rethrow;
     }
-
-    final itemsJson = jsonEncode(items.map((item) => item.toMap()).toList());
-    await File('${tempDir.path}/items.json').writeAsString(itemsJson);
-
-    final metadata = await _dbService.getSyncMetadata() ?? {};
-    metadata['backup_time'] = DateTime.now().toIso8601String();
-    metadata['is_full_backup'] = isFull;
-    await File('${tempDir.path}/metadata.json')
-        .writeAsString(jsonEncode(metadata));
-
-    final locations = await _dbService.getAllLocations();
-    await File('${tempDir.path}/locations.json')
-        .writeAsString(jsonEncode(locations.map((l) => l.toMap()).toList()));
-
-    final categories = await _dbService.getAllCategories();
-    await File('${tempDir.path}/categories.json')
-        .writeAsString(jsonEncode(categories.map((c) => c.toMap()).toList()));
-
-    return tempDir;
   }
 
-  Future<String> _encryptBackupFile(String dirPath) async {
-    final tempFile = File('${dirPath}_encrypted.enc');
-    final sink = tempFile.openWrite();
+  Future<String> _createZip(String dirPath) async {
+    final zipPath = '${dirPath}.zip';
+    final result = await Process.run('zip', ['-r', zipPath, '.'], workingDirectory: dirPath);
+    if (result.exitCode != 0) {
+      throw Exception('Failed to create zip: ${result.stderr}');
+    }
+    return zipPath;
+  }
 
-    final files = [
-      'database.db',
-      'items.json',
-      'metadata.json',
-      'locations.json',
-      'categories.json',
-    ];
+  Future<String> _encryptFile(String filePath) async {
+    final file = File(filePath);
+    final bytes = await file.readAsBytes();
+    final encrypted = _encryption.encryptBytes(bytes);
+    final encryptedPath = '${filePath}.enc';
+    await File(encryptedPath).writeAsBytes(encrypted);
+    return encryptedPath;
+  }
 
-    for (final fileName in files) {
-      final file = File('$dirPath/$fileName');
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        final encrypted = _encryption.encryptBytes(bytes);
-        final header = '${fileName.length}';
-        sink.add(utf8.encode(header.padLeft(4, '0')));
-        sink.add(utf8.encode(fileName));
-        sink.add(encrypted);
+  Future<void> _copyDirectory(Directory source, Directory destination) async {
+    await for (final entity in source.list(recursive: true)) {
+      final relativePath = entity.path.substring(source.path.length + 1);
+      final newPath = '${destination.path}/$relativePath';
+      if (entity is File) {
+        await entity.copy(newPath);
+      } else if (entity is Directory) {
+        await Directory(newPath).create(recursive: true);
       }
     }
-
-    await sink.close();
-    return tempFile.path;
   }
 
-  Future<void> _cleanupOldBackups(Client client) async {
+  Future<void> _cleanupOldBackups(webdav.Client client) async {
     final history = await _dbService.getBackupHistory();
     if (history.length <= 5) return;
 
@@ -237,14 +216,15 @@ class WebDAVService {
     try {
       final files = await client.readDir(_backupDir);
       for (final file in files) {
-        if (!filesToKeep.contains(file.name) && 
-            file.name.startsWith('findit_backup_') &&
-            file.name.endsWith('.enc')) {
-          await client.remove('$_backupDir/${file.name}');
+        final fileName = file.name ?? '';
+        if (!filesToKeep.contains(fileName) && 
+            fileName.startsWith('findit_backup_') &&
+            fileName.endsWith('.enc')) {
+          await client.remove('$_backupDir/$fileName');
         }
       }
     } catch (e) {
-      print('清理旧备份失败：$e');
+      // Ignore cleanup errors
     }
   }
 
@@ -254,59 +234,49 @@ class WebDAVService {
     if (fileName == null) {
       final files = await client.readDir(_backupDir);
       final backupFiles = files
-          .where((f) => f.name.startsWith('findit_backup_') && 
-                       f.name.endsWith('.enc'))
+          .where((f) => (f.name ?? '').startsWith('findit_backup_') && 
+                       (f.name ?? '').endsWith('.enc'))
           .toList();
       
       if (backupFiles.isEmpty) {
         throw Exception('没有找到备份文件');
       }
       
-      backupFiles.sort((a, b) => b.name.compareTo(a.name));
+      backupFiles.sort((a, b) => (b.name ?? '').compareTo(a.name ?? ''));
       fileName = backupFiles.first.name;
     }
 
-    final encryptedBytes = await client.readBytes('$_backupDir/$fileName');
-    final tempDir = await _decryptBackupFile(encryptedBytes);
+    if (fileName == null) {
+      throw Exception('备份文件名为空');
+    }
+
+    final encryptedBytes = await client.read('$_backupDir/$fileName');
+    final tempDir = await _decryptAndExtract(encryptedBytes);
 
     await _importBackupData(tempDir.path);
-
-    await Directory(tempDir.path).delete(recursive: true);
+    await tempDir.delete(recursive: true);
 
     return '恢复成功';
   }
 
-  Future<Directory> _decryptBackupFile(List<int> encryptedBytes) async {
+  Future<Directory> _decryptAndExtract(List<int> encryptedBytes) async {
+    // Decrypt
+    final decrypted = _encryption.decryptBytes(encryptedBytes);
+    
     final tempFile = await File.systemTemp.createTemp('findit_decrypt_');
-    await tempFile.writeAsBytes(encryptedBytes);
+    await tempFile.writeAsBytes(decrypted);
     
-    final decryptedDir = await Directory.systemTemp.createTemp('findit_restored_');
+    final extractDir = await Directory.systemTemp.createTemp('findit_restored_');
     
-    final bytes = await tempFile.readAsBytes();
-    int offset = 0;
-
-    while (offset < bytes.length) {
-      if (offset + 4 > bytes.length) break;
-      
-      final headerLength = int.parse(
-        utf8.decode(bytes.sublist(offset, offset + 4)),
-      );
-      offset += 4;
-
-      if (offset + headerLength > bytes.length) break;
-      
-      final fileName = utf8.decode(bytes.sublist(offset, offset + headerLength));
-      offset += headerLength;
-
-      final encryptedData = bytes.sublist(offset);
-      final decrypted = _encryption.decryptBytes(encryptedData);
-
-      await File('${decryptedDir.path}/$fileName').writeAsBytes(decrypted);
-      offset = bytes.length;
-    }
-
+    // Unzip
+    final result = await Process.run('unzip', ['-o', tempFile.path, '-d', extractDir.path]);
     await tempFile.delete();
-    return decryptedDir;
+    
+    if (result.exitCode != 0) {
+      throw Exception('Failed to extract: ${result.stderr}');
+    }
+    
+    return extractDir;
   }
 
   Future<void> _importBackupData(String dirPath) async {
@@ -355,9 +325,10 @@ class WebDAVService {
     final client = await getClient();
     final files = await client.readDir(_backupDir);
     return files
-        .where((f) => f.name.startsWith('findit_backup_') && 
-                     f.name.endsWith('.enc'))
-        .map((f) => f.name)
+        .where((f) => (f.name ?? '').startsWith('findit_backup_') && 
+                     (f.name ?? '').endsWith('.enc'))
+        .map((f) => f.name ?? '')
+        .where((name) => name.isNotEmpty)
         .toList();
   }
 
