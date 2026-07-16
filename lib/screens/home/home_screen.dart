@@ -59,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildSearchBar(provider),
                   const SizedBox(height: 24),
                   const Text(
-                    '常用位置',
+                    '所有位置',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

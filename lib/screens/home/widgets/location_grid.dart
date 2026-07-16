@@ -10,7 +10,7 @@ class LocationGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
-        final locations = provider.locations.take(6).toList();
+        final locations = provider.locations;
 
         if (locations.isEmpty) {
           return _buildGridItem(
