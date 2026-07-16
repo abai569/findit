@@ -3,12 +3,14 @@ class ItemCategory {
   final String name;
   final String icon;
   final String color;
+  final int sortOrder;
 
   ItemCategory({
     this.id,
     required this.name,
     required this.icon,
     required this.color,
+    this.sortOrder = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -17,6 +19,7 @@ class ItemCategory {
       'name': name,
       'icon': icon,
       'color': color,
+      'sort_order': sortOrder,
     };
   }
 
@@ -26,6 +29,7 @@ class ItemCategory {
       name: map['name'],
       icon: map['icon'],
       color: map['color'],
+      sortOrder: map['sort_order'] ?? 0,
     );
   }
 
@@ -34,12 +38,14 @@ class ItemCategory {
     String? name,
     String? icon,
     String? color,
+    int? sortOrder,
   }) {
     return ItemCategory(
       id: id ?? this.id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
       color: color ?? this.color,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 

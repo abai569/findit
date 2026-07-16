@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../models/item.dart';
-import '../../add_item/add_item_screen.dart';
+import '../../item_detail/item_detail_screen.dart';
 
 class ItemList extends StatelessWidget {
   final int? limit;
@@ -86,7 +86,7 @@ class _ItemCard extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => AddItemScreen(item: item),
+              builder: (context) => ItemDetailScreen(item: item),
             ),
           ).then((_) {
             provider.loadAllData();

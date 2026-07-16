@@ -164,6 +164,25 @@ class AppProvider with ChangeNotifier {
     await _refreshAfterStructureChange();
   }
 
+  Future<void> reorderLocations(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex--;
+    final reordered = List<Location>.from(_locations);
+    final location = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, location);
+    _locations = reordered;
+    notifyListeners();
+    try {
+      await _db.reorderLocations(
+        reordered.map((location) => location.id!).toList(),
+      );
+      await loadAllData();
+      await _backupStructureChange();
+    } catch (e) {
+      await loadAllData();
+      debugPrint('保存位置排序失败：$e');
+    }
+  }
+
   Future<void> addCategory({
     required String name,
     required String icon,
@@ -191,8 +210,31 @@ class AppProvider with ChangeNotifier {
     await _refreshAfterStructureChange();
   }
 
+  Future<void> reorderCategories(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex--;
+    final reordered = List<ItemCategory>.from(_categories);
+    final category = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, category);
+    _categories = reordered;
+    notifyListeners();
+    try {
+      await _db.reorderCategories(
+        reordered.map((category) => category.id!).toList(),
+      );
+      await loadAllData();
+      await _backupStructureChange();
+    } catch (e) {
+      await loadAllData();
+      debugPrint('保存分类排序失败：$e');
+    }
+  }
+
   Future<void> _refreshAfterStructureChange() async {
     await loadAllData();
+    await _backupStructureChange();
+  }
+
+  Future<void> _backupStructureChange() async {
     if (_hasWebDAVConfig) {
       try {
         await _webdav.backup();
@@ -208,6 +250,19 @@ class AppProvider with ChangeNotifier {
     } else {
       _items = await _db.searchItems(keyword);
     }
+    notifyListeners();
+  }
+
+  Future<void> queryItems({
+    String? keyword,
+    int? locationId,
+    int? categoryId,
+  }) async {
+    _items = await _db.queryItems(
+      keyword: keyword,
+      locationId: locationId,
+      categoryId: categoryId,
+    );
     notifyListeners();
   }
 

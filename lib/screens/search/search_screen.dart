@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../models/item_category.dart';
-import '../add_item/add_item_screen.dart';
+import '../item_detail/item_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final int? initialLocationId;
@@ -27,11 +27,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialLocationId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<AppProvider>().filterByLocation(widget.initialLocationId!);
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshResults());
   }
 
   @override
@@ -78,17 +74,13 @@ class _SearchScreenState extends State<SearchScreen> {
                             icon: const Icon(Icons.clear),
                             onPressed: () {
                               _searchController.clear();
-                              if (widget.initialLocationId != null) {
-                                provider.filterByLocation(widget.initialLocationId!);
-                              } else {
-                                provider.loadAllData();
-                              }
+                              _refreshResults();
                             },
                           )
                         : null,
                   ),
                   onChanged: (value) {
-                    provider.searchItems(value);
+                    _refreshResults();
                   },
                 ),
               ),
@@ -119,11 +111,7 @@ class _SearchScreenState extends State<SearchScreen> {
               setState(() {
                 _selectedCategoryId = null;
               });
-              if (widget.initialLocationId != null) {
-                provider.filterByLocation(widget.initialLocationId!);
-              } else {
-                provider.loadAllData();
-              }
+              _refreshResults();
             },
           ),
           ...provider.categories.map((category) {
@@ -134,7 +122,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 setState(() {
                   _selectedCategoryId = selected ? category.id : null;
                 });
-                provider.filterByCategory(category.id!);
+                _refreshResults();
               },
             );
           }),
@@ -234,10 +222,10 @@ class _SearchScreenState extends State<SearchScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AddItemScreen(item: item),
+                  builder: (context) => ItemDetailScreen(item: item),
                 ),
               ).then((_) {
-                provider.loadAllData();
+                _refreshResults();
               });
             },
           ),
@@ -260,5 +248,13 @@ class _SearchScreenState extends State<SearchScreen> {
         color: Colors.grey[400],
       ),
     );
+  }
+
+  void _refreshResults() {
+    context.read<AppProvider>().queryItems(
+          keyword: _searchController.text.trim(),
+          locationId: widget.initialLocationId,
+          categoryId: _selectedCategoryId,
+        );
   }
 }

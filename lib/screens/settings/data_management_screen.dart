@@ -35,17 +35,21 @@ class _LocationTab extends StatelessWidget {
       builder: (context, provider, child) => _ManagementList(
         emptyText: '暂无位置',
         onAdd: () => _showLocationDialog(context),
+        onReorder: provider.reorderLocations,
         children: provider.locations
+            .asMap()
+            .entries
             .map(
-              (location) => ListTile(
-                title: Text(location.getFullPath(provider.locations)),
+              (entry) => ListTile(
+                key: ValueKey('location-${entry.value.id}'),
+                title: Text(entry.value.getFullPath(provider.locations)),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       tooltip: '重命名',
                       icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _showLocationDialog(context, location),
+                      onPressed: () => _showLocationDialog(context, entry.value),
                     ),
                     IconButton(
                       tooltip: '删除',
@@ -54,11 +58,11 @@ class _LocationTab extends StatelessWidget {
                         final confirmed = await _confirmDelete(
                           context,
                           '删除位置',
-                          '确定删除“${location.name}”吗？',
+                          '确定删除“${entry.value.name}”吗？',
                         );
                         if (!confirmed) return;
                         try {
-                          await provider.deleteLocation(location.id!);
+                          await provider.deleteLocation(entry.value.id!);
                         } catch (e) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -67,6 +71,13 @@ class _LocationTab extends StatelessWidget {
                           }
                         }
                       },
+                    ),
+                    ReorderableDragStartListener(
+                      index: entry.key,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.drag_handle),
+                      ),
                     ),
                   ],
                 ),
@@ -126,19 +137,23 @@ class _CategoryTab extends StatelessWidget {
       builder: (context, provider, child) => _ManagementList(
         emptyText: '暂无分类',
         onAdd: () => _showCategoryDialog(context),
+        onReorder: provider.reorderCategories,
         children: provider.categories
+            .asMap()
+            .entries
             .map(
-              (category) => ListTile(
-                leading: Text(category.icon, style: const TextStyle(fontSize: 24)),
-                title: Text(category.name),
-                subtitle: Text(category.color),
+              (entry) => ListTile(
+                key: ValueKey('category-${entry.value.id}'),
+                leading: Text(entry.value.icon, style: const TextStyle(fontSize: 24)),
+                title: Text(entry.value.name),
+                subtitle: Text(entry.value.color),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       tooltip: '编辑',
                       icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _showCategoryDialog(context, category),
+                      onPressed: () => _showCategoryDialog(context, entry.value),
                     ),
                     IconButton(
                       tooltip: '删除',
@@ -147,11 +162,11 @@ class _CategoryTab extends StatelessWidget {
                         final confirmed = await _confirmDelete(
                           context,
                           '删除分类',
-                          '删除“${category.name}”后，关联物品将变为未分类。',
+                          '删除“${entry.value.name}”后，关联物品将变为未分类。',
                         );
                         if (!confirmed) return;
                         try {
-                          await provider.deleteCategory(category.id!);
+                          await provider.deleteCategory(entry.value.id!);
                         } catch (e) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +175,13 @@ class _CategoryTab extends StatelessWidget {
                           }
                         }
                       },
+                    ),
+                    ReorderableDragStartListener(
+                      index: entry.key,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.drag_handle),
+                      ),
                     ),
                   ],
                 ),
@@ -266,22 +288,41 @@ Future<bool> _confirmDelete(
 class _ManagementList extends StatelessWidget {
   final String emptyText;
   final VoidCallback onAdd;
+  final ReorderCallback onReorder;
   final List<Widget> children;
 
-  const _ManagementList({required this.emptyText, required this.onAdd, required this.children});
+  const _ManagementList({
+    required this.emptyText,
+    required this.onAdd,
+    required this.onReorder,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return Column(
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('新增')),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('新增'),
+            ),
+          ),
         ),
-        const SizedBox(height: 12),
-        if (children.isEmpty) Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(emptyText)))
-        else ...children,
+        Expanded(
+          child: children.isEmpty
+              ? Center(child: Text(emptyText))
+              : ReorderableListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  buildDefaultDragHandles: false,
+                  onReorder: onReorder,
+                  children: children,
+                ),
+        ),
       ],
     );
   }

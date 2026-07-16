@@ -23,7 +23,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -44,7 +44,8 @@ class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         icon TEXT NOT NULL,
-        color TEXT NOT NULL
+        color TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0
       )
     ''');
 
@@ -97,8 +98,12 @@ class DatabaseService {
       await db.insert('locations', loc);
     }
 
-    for (var cat in ItemCategory.getDefaults()) {
-      await db.insert('categories', cat.toMap());
+    final defaultCategories = ItemCategory.getDefaults();
+    for (var index = 0; index < defaultCategories.length; index++) {
+      await db.insert(
+        'categories',
+        defaultCategories[index].copyWith(sortOrder: index).toMap(),
+      );
     }
   }
 
@@ -107,18 +112,40 @@ class DatabaseService {
       await db.execute('ALTER TABLE items ADD COLUMN image_paths TEXT');
       await db.execute('ALTER TABLE items ADD COLUMN notes TEXT');
     }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
+      );
+      await db.execute('UPDATE categories SET sort_order = id');
+    }
   }
 
   Future<int> insertLocation(Location location) async {
     final db = await database;
     await _ensureUniqueLocationName(db, location.name, location.parentId);
-    return await db.insert('locations', location.toMap());
+    final map = location.toMap();
+    map['sort_order'] = await _nextSortOrder(db, 'locations');
+    return await db.insert('locations', map);
   }
 
   Future<List<Location>> getAllLocations() async {
     final db = await database;
     final maps = await db.query('locations', orderBy: 'sort_order, id');
     return maps.map((map) => Location.fromMap(map)).toList();
+  }
+
+  Future<void> reorderLocations(List<int> ids) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (var index = 0; index < ids.length; index++) {
+        await txn.update(
+          'locations',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [ids[index]],
+        );
+      }
+    });
   }
 
   Future<int> updateLocation(Location location) async {
@@ -238,6 +265,35 @@ class DatabaseService {
     return maps.map((map) => Item.fromMap(map)).toList();
   }
 
+  Future<List<Item>> queryItems({
+    String? keyword,
+    int? locationId,
+    int? categoryId,
+  }) async {
+    final db = await database;
+    final where = <String>['is_deleted = 0'];
+    final whereArgs = <Object?>[];
+    if (keyword != null && keyword.isNotEmpty) {
+      where.add('name LIKE ?');
+      whereArgs.add('%$keyword%');
+    }
+    if (locationId != null) {
+      where.add('location_id = ?');
+      whereArgs.add(locationId);
+    }
+    if (categoryId != null) {
+      where.add('category_id = ?');
+      whereArgs.add(categoryId);
+    }
+    final maps = await db.query(
+      'items',
+      where: where.join(' AND '),
+      whereArgs: whereArgs,
+      orderBy: 'updated_at DESC',
+    );
+    return maps.map(Item.fromMap).toList();
+  }
+
   Future<List<Item>> getItemsByLocation(int locationId) async {
     final db = await database;
     final maps = await db.query(
@@ -262,14 +318,30 @@ class DatabaseService {
 
   Future<List<ItemCategory>> getAllCategories() async {
     final db = await database;
-    final maps = await db.query('categories');
+    final maps = await db.query('categories', orderBy: 'sort_order, id');
     return maps.map((map) => ItemCategory.fromMap(map)).toList();
+  }
+
+  Future<void> reorderCategories(List<int> ids) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (var index = 0; index < ids.length; index++) {
+        await txn.update(
+          'categories',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [ids[index]],
+        );
+      }
+    });
   }
 
   Future<int> insertCategory(ItemCategory category) async {
     final db = await database;
     await _ensureUniqueCategoryName(db, category.name);
-    return db.insert('categories', category.toMap());
+    final map = category.toMap();
+    map['sort_order'] = await _nextSortOrder(db, 'categories');
+    return db.insert('categories', map);
   }
 
   Future<int> updateCategory(ItemCategory category) async {
@@ -309,6 +381,13 @@ class DatabaseService {
       limit: 1,
     );
     if (existing.isNotEmpty) throw Exception('分类名称已存在');
+  }
+
+  Future<int> _nextSortOrder(DatabaseExecutor db, String table) async {
+    final result = await db.rawQuery(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM $table',
+    );
+    return result.first['next_order'] as int;
   }
 
   Future<void> updateSyncMetadata({
