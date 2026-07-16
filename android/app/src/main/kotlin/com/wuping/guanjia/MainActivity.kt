@@ -1,4 +1,4 @@
-package com.example.findit
+package com.wuping.guanjia
 
 import io.flutter.embedding.android.FlutterActivity
 
