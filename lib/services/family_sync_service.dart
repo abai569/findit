@@ -259,7 +259,7 @@ class FamilySyncService {
       if (useLocal) {
         final deleted = local!['is_deleted'] == 1;
         final photoPaths = deleted
-            ? (remote?['photo_paths'] as List? ?? const [])
+            ? <String>[]
             : await _uploadPhotos(
                 familyId,
                 syncId,
@@ -277,6 +277,11 @@ class FamilySyncService {
           'updated_at': local['updated_at'],
           'is_deleted': deleted,
         });
+        await _deleteUnreferencedPhotos(
+          familyId: familyId,
+          itemId: syncId,
+          referencedPaths: photoPaths,
+        );
         merged.add({...local, 'sync_dirty': 0});
       } else {
         final imagePaths = await _downloadPhotos(remote!['photo_paths'] as List? ?? []);
@@ -336,6 +341,23 @@ class FamilySyncService {
       localPaths.add(await _images.saveImageBytes(bytes, extension));
     }
     return localPaths;
+  }
+
+  Future<void> _deleteUnreferencedPhotos({
+    required String familyId,
+    required String itemId,
+    required List<dynamic> referencedPaths,
+  }) async {
+    final directory = '$familyId/$itemId';
+    final referenced = referencedPaths.whereType<String>().toSet();
+    final files = await _client.storage.from(_bucket).list(path: directory);
+    final obsoletePaths = files
+        .map((file) => '$directory/${file.name}')
+        .where((path) => !referenced.contains(path))
+        .toList();
+    if (obsoletePaths.isNotEmpty) {
+      await _client.storage.from(_bucket).remove(obsoletePaths);
+    }
   }
 
   Future<Map<Object?, String>> _localIdToSyncId(String table) async {
