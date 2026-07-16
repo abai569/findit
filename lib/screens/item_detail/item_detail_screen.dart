@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,14 @@ class ItemDetailScreen extends StatefulWidget {
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   late Item _item = widget.item;
   int _selectedImageIndex = 0;
+  Timer? _savedMessageTimer;
+  bool _showSavedMessage = false;
+
+  @override
+  void dispose() {
+    _savedMessageTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +44,24 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_showSavedMessage) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('修改已保存', style: TextStyle(color: Colors.green)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           Text(
             _item.name,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -131,7 +158,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _editItem(AppProvider provider) async {
-    await Navigator.push(
+    final saved = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => AddItemScreen(item: _item)),
     );
@@ -144,12 +171,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     }
     setState(() {
       _item = matches.first;
+      _showSavedMessage = saved == true;
       if (_selectedImageIndex >= _item.imagePaths.length) {
         _selectedImageIndex = _item.imagePaths.isEmpty
             ? 0
             : _item.imagePaths.length - 1;
       }
     });
+    if (saved == true) {
+      _savedMessageTimer?.cancel();
+      _savedMessageTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _showSavedMessage = false);
+      });
+    }
   }
 
   void _showImagePreview(int initialIndex) {

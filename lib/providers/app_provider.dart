@@ -95,12 +95,24 @@ class AppProvider with ChangeNotifier {
       }
     }
 
-    await _db.updateItem(item);
+    final updatedRows = await _db.updateItem(item);
+    if (updatedRows != 1) {
+      throw Exception('物品不存在或已被删除');
+    }
     try {
       await loadAllData();
     } catch (e) {
       debugPrint('刷新物品数据失败：$e');
     }
+
+    if (_hasWebDAVConfig) {
+      try {
+        await _webdav.backup();
+      } catch (e) {
+        print('自动备份失败：$e');
+      }
+    }
+    await _syncAfterChange();
 
     if (previousItem != null) {
       final removedPaths = previousItem.imagePaths.toSet()
@@ -114,14 +126,6 @@ class AppProvider with ChangeNotifier {
       }
     }
     
-    if (_hasWebDAVConfig) {
-      try {
-        await _webdav.backup();
-      } catch (e) {
-        print('自动备份失败：$e');
-      }
-    }
-    await _syncAfterChange();
   }
 
   Future<void> deleteItem(int id) async {

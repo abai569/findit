@@ -253,6 +253,7 @@ class FamilySyncService {
       final local = localById[syncId];
       final remote = remoteById[syncId];
       final useLocal = remote == null ||
+          local?['sync_dirty'] == 1 ||
           (local != null &&
               !_time(local['updated_at']).isBefore(_time(remote['updated_at'])));
       if (useLocal) {
@@ -276,7 +277,7 @@ class FamilySyncService {
           'updated_at': local['updated_at'],
           'is_deleted': deleted,
         });
-        merged.add(local);
+        merged.add({...local, 'sync_dirty': 0});
       } else {
         final imagePaths = await _downloadPhotos(remote!['photo_paths'] as List? ?? []);
         final locationId = locationLocalIds[remote['location_id']];
@@ -292,6 +293,7 @@ class FamilySyncService {
           'created_at': remote['created_at'],
           'updated_at': remote['updated_at'],
           'is_deleted': remote['is_deleted'] == true ? 1 : 0,
+          'sync_dirty': 0,
         });
       }
     }

@@ -25,7 +25,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -70,6 +70,7 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         is_deleted INTEGER DEFAULT 0,
+        sync_dirty INTEGER DEFAULT 1,
         FOREIGN KEY (location_id) REFERENCES locations(id),
         FOREIGN KEY (category_id) REFERENCES categories(id)
       )
@@ -161,6 +162,11 @@ class DatabaseService {
           );
         }
       }
+    }
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE items ADD COLUMN sync_dirty INTEGER DEFAULT 0',
+      );
     }
   }
 
@@ -283,15 +289,20 @@ class DatabaseService {
 
   Future<int> insertItem(Item item) async {
     final db = await database;
-    return await db.insert('items', {...item.toMap(), 'sync_id': _uuid.v4()});
+    final now = DateTime.now().toUtc();
+    return await db.insert('items', {
+      ...item.copyWith(createdAt: now, updatedAt: now).toMap(),
+      'sync_id': _uuid.v4(),
+      'sync_dirty': 1,
+    });
   }
 
   Future<int> updateItem(Item item) async {
     final db = await database;
-    final updatedItem = item.copyWith(updatedAt: DateTime.now());
+    final updatedItem = item.copyWith(updatedAt: DateTime.now().toUtc());
     return await db.update(
       'items',
-      updatedItem.toMap(),
+      {...updatedItem.toMap(), 'sync_dirty': 1},
       where: 'id = ?',
       whereArgs: [item.id],
     );
@@ -304,6 +315,7 @@ class DatabaseService {
       {
         'is_deleted': 1,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'sync_dirty': 1,
       },
       where: 'id = ?',
       whereArgs: [id],

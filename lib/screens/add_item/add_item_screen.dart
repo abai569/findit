@@ -25,6 +25,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final List<File> _imageFiles = [];
   final Set<String> _pendingImagePaths = {};
   final _imageService = ImageService();
+  bool _isSaving = false;
+  String? _saveError;
 
   bool get isEditing => widget.item != null;
 
@@ -89,6 +91,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   const SizedBox(height: 16),
                   _buildNotesField(),
                   const SizedBox(height: 32),
+                  if (_saveError != null) ...[
+                    _buildSaveError(),
+                    const SizedBox(height: 12),
+                  ],
                   _buildSaveButton(provider),
                 ],
               ),
@@ -302,9 +308,42 @@ class _AddItemScreenState extends State<AddItemScreen> {
       width: double.infinity,
       height: 48,
       child: FilledButton.icon(
-        onPressed: () => _saveItem(provider),
-        icon: const Icon(Icons.save),
-        label: Text(isEditing ? '保存修改' : '添加物品'),
+        onPressed: _isSaving ? null : () => _saveItem(provider),
+        icon: _isSaving
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.save),
+        label: Text(
+          _isSaving ? '正在保存...' : isEditing ? '保存修改' : '添加物品',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSaveError() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _saveError!,
+              style: TextStyle(color: colorScheme.onErrorContainer),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -383,6 +422,11 @@ class _AddItemScreenState extends State<AddItemScreen> {
       return;
     }
 
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
     try {
       if (isEditing) {
         final updatedItem = widget.item!.copyWith(
@@ -407,19 +451,16 @@ class _AddItemScreenState extends State<AddItemScreen> {
       _pendingImagePaths.clear();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isEditing ? '修改成功' : '添加成功'),
-          ),
-        );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败：$e')),
-        );
+        setState(() {
+          _saveError = '保存失败：${e.toString().replaceFirst('Exception: ', '')}';
+        });
       }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
