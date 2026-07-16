@@ -5,11 +5,13 @@ import '../models/item_category.dart';
 import '../services/database.dart';
 import '../services/webdav_service.dart';
 import '../services/image_service.dart';
+import '../services/family_sync_service.dart';
 
 class AppProvider with ChangeNotifier {
   final DatabaseService _db = DatabaseService();
   final WebDAVService _webdav = WebDAVService();
   final ImageService _imageService = ImageService();
+  final FamilySyncService _familySync = FamilySyncService();
 
   List<Item> _items = [];
   List<Location> _locations = [];
@@ -26,6 +28,7 @@ class AppProvider with ChangeNotifier {
   String? get error => _error;
   bool get hasWebDAVConfig => _hasWebDAVConfig;
   List<Map<String, dynamic>> get backupHistory => _backupHistory;
+  FamilySyncService get familySync => _familySync;
 
   Future<void> init() async {
     _isLoading = true;
@@ -35,6 +38,7 @@ class AppProvider with ChangeNotifier {
       await loadAllData();
       _hasWebDAVConfig = await _webdav.hasCredentials();
       _backupHistory = await _db.getBackupHistory();
+      await _familySync.initializeFamily();
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -79,6 +83,7 @@ class AppProvider with ChangeNotifier {
         print('自动备份失败：$e');
       }
     }
+    await _syncAfterChange();
   }
 
   Future<void> updateItem(Item item) async {
@@ -116,6 +121,7 @@ class AppProvider with ChangeNotifier {
         print('自动备份失败：$e');
       }
     }
+    await _syncAfterChange();
   }
 
   Future<void> deleteItem(int id) async {
@@ -147,6 +153,7 @@ class AppProvider with ChangeNotifier {
         print('自动备份失败：$e');
       }
     }
+    await _syncAfterChange();
   }
 
   Future<void> addLocation(String name) async {
@@ -242,6 +249,22 @@ class AppProvider with ChangeNotifier {
         debugPrint('自动备份失败：$e');
       }
     }
+    await _syncAfterChange();
+  }
+
+  Future<void> _syncAfterChange() async {
+    if (!FamilySyncService.isConfigured || _familySync.currentUser == null) return;
+    try {
+      await _familySync.sync();
+      await loadAllData();
+    } catch (e) {
+      debugPrint('家庭同步失败：$e');
+    }
+  }
+
+  Future<void> syncFamily() async {
+    await _familySync.sync();
+    await loadAllData();
   }
 
   Future<void> searchItems(String keyword) async {

@@ -16,6 +16,7 @@ class ItemDetailScreen extends StatefulWidget {
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   late Item _item = widget.item;
+  int _selectedImageIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -42,23 +43,54 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           ),
           if (_item.imagePaths.isNotEmpty) ...[
             const SizedBox(height: 20),
+            AspectRatio(
+              aspectRatio: 4 / 3,
+              child: InkWell(
+                onTap: () => _showImagePreview(_selectedImageIndex),
+                borderRadius: BorderRadius.circular(8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(_item.imagePaths[_selectedImageIndex]),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined, size: 48),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             SizedBox(
-              height: 220,
-              child: PageView.builder(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
                 itemCount: _item.imagePaths.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
-                  final image = File(_item.imagePaths[index]);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: InkWell(
-                      onTap: () => _showImagePreview(image),
-                      child: ClipRRect(
+                  final selected = index == _selectedImageIndex;
+                  return InkWell(
+                    onTap: () => setState(() => _selectedImageIndex = index),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 72,
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: selected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: 2,
+                        ),
                         borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
                         child: Image.file(
-                          image,
+                          File(_item.imagePaths[index]),
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(Icons.broken_image_outlined, size: 48),
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.broken_image_outlined,
                           ),
                         ),
                       ),
@@ -69,9 +101,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
             if (_item.imagePaths.length > 1)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  '共 ${_item.imagePaths.length} 张照片，左右滑动查看',
+                  '${_selectedImageIndex + 1} / ${_item.imagePaths.length}',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey[600]),
                 ),
@@ -110,20 +142,82 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       Navigator.pop(context);
       return;
     }
-    setState(() => _item = matches.first);
+    setState(() {
+      _item = matches.first;
+      if (_selectedImageIndex >= _item.imagePaths.length) {
+        _selectedImageIndex = _item.imagePaths.isEmpty
+            ? 0
+            : _item.imagePaths.length - 1;
+      }
+    });
   }
 
-  void _showImagePreview(File image) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(12),
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 4,
-          child: Image.file(image, fit: BoxFit.contain),
+  void _showImagePreview(int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _FullScreenGallery(
+          imagePaths: _item.imagePaths,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
+  }
+}
+
+class _FullScreenGallery extends StatefulWidget {
+  final List<String> imagePaths;
+  final int initialIndex;
+
+  const _FullScreenGallery({
+    required this.imagePaths,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  late final PageController _pageController = PageController(
+    initialPage: widget.initialIndex,
+  );
+  late int _currentIndex = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_currentIndex + 1} / ${widget.imagePaths.length}'),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.imagePaths.length,
+        onPageChanged: (index) => setState(() => _currentIndex = index),
+        itemBuilder: (context, index) => InteractiveViewer(
+          key: ValueKey(widget.imagePaths[index]),
+          minScale: 1,
+          maxScale: 5,
+          child: Center(
+            child: Image.file(
+              File(widget.imagePaths[index]),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white,
+                size: 56,
+              ),
+            ),
+          ),
         ),
       ),
     );

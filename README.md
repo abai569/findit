@@ -20,6 +20,7 @@
 - ✅ 加密存储（AES-256）
 - ✅ 保留最近 5 个版本
 - ✅ 一键恢复（换机同步）
+- ✅ 家庭成员云端同步（Supabase，可离线编辑后合并）
 
 ## 技术栈
 
@@ -29,6 +30,7 @@
 - **WebDAV**: webdav_client
 - **图片压缩**: flutter_image_compress
 - **加密**: encrypt (AES-256-CBC)
+- **家庭同步**: Supabase Auth / Database / Storage
 
 ## 快速开始
 
@@ -79,6 +81,30 @@ flutter build ios --release
 用户名：你的群晖用户名
 密码：你的群晖密码
 ```
+
+## 家庭同步配置
+
+家庭同步使用 Supabase。首次配置需要在 Supabase SQL Editor 中执行
+`supabase/schema.sql`，然后在项目 Settings -> API 中取得 Project URL 和
+publishable/anon key。
+
+本地运行时注入配置：
+
+```bash
+flutter run \
+  --dart-define=SUPABASE_URL=https://你的项目.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=你的anon_key
+```
+
+GitHub Actions 需要在仓库 Settings -> Secrets and variables -> Actions 中添加：
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+安装配置后的 APK 后，在“设置 -> 家庭同步”中注册或登录。一个成员创建家庭后，
+把显示的邀请码发给其他成员，其他成员登录后输入邀请码即可加入。家庭成员的物品、
+位置、分类和照片会在新增、修改以及点击“立即同步”时合并。WebDAV 仍然是独立的
+整库备份恢复功能。
 
 ## 项目结构
 

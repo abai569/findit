@@ -300,28 +300,24 @@ class _ManagementList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('新增'),
-            ),
+        children.isEmpty
+            ? Center(child: Text(emptyText))
+            : ReorderableListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                buildDefaultDragHandles: false,
+                onReorder: onReorder,
+                children: children,
+              ),
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            onPressed: onAdd,
+            tooltip: '新增',
+            child: const Icon(Icons.add),
           ),
-        ),
-        Expanded(
-          child: children.isEmpty
-              ? Center(child: Text(emptyText))
-              : ReorderableListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  buildDefaultDragHandles: false,
-                  onReorder: onReorder,
-                  children: children,
-                ),
         ),
       ],
     );

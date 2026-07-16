@@ -111,6 +111,11 @@ class WebDAVService {
       final items = await _dbService.getAllItems();
       final locations = await _dbService.getAllLocations();
       final categories = await _dbService.getAllCategories();
+      final syncItems = {
+        for (final row in await _dbService.getSyncRows('items')) row['id']: row,
+      };
+      final syncLocations = await _dbService.getSyncRows('locations');
+      final syncCategories = await _dbService.getSyncRows('categories');
       final metadata = await _dbService.getSyncMetadata() ?? {};
       
       metadata['backup_time'] = DateTime.now().toIso8601String();
@@ -139,6 +144,7 @@ class WebDAVService {
         }
 
         final itemMap = item.toMap();
+        itemMap['sync_id'] = syncItems[item.id]?['sync_id'];
         itemMap['image_path'] = null;
         itemMap['image_paths'] = jsonEncode(imageRefs);
         itemMaps.add(itemMap);
@@ -149,8 +155,8 @@ class WebDAVService {
         'format_version': _backupFormatVersion,
         'items': itemMaps,
         'images': images,
-        'locations': locations.map((l) => l.toMap()).toList(),
-        'categories': categories.map((c) => c.toMap()).toList(),
+        'locations': syncLocations,
+        'categories': syncCategories,
         'metadata': metadata,
       };
 

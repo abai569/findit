@@ -6,6 +6,8 @@ import 'widgets/webdav_config_dialog.dart';
 import 'widgets/backup_dialog.dart';
 import 'widgets/restore_dialog.dart';
 import 'data_management_screen.dart';
+import 'widgets/family_sync_dialog.dart';
+import '../../services/family_sync_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,6 +37,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _buildSectionHeader('数据备份'),
+              _buildFamilySyncCard(context, provider),
+              const SizedBox(height: 8),
               _buildWebDAVCard(context, provider),
               const SizedBox(height: 8),
               _buildBackupCard(context, provider),
@@ -95,6 +99,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
             context: context,
             builder: (context) => const WebDAVConfigDialog(),
           );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFamilySyncCard(BuildContext context, AppProvider provider) {
+    final sync = provider.familySync;
+    final status = !FamilySyncService.isConfigured
+        ? '未配置云端'
+        : sync.currentUser == null
+            ? '未登录'
+            : '已登录，可进行家庭同步';
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: sync.currentUser == null ? Colors.grey[200] : Colors.green[100],
+          child: Icon(
+            Icons.family_restroom,
+            color: sync.currentUser == null ? Colors.grey : Colors.green,
+          ),
+        ),
+        title: const Text('家庭同步'),
+        subtitle: Text(status),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await showDialog(
+            context: context,
+            builder: (_) => const FamilySyncDialog(),
+          );
+          if (mounted) setState(() {});
         },
       ),
     );

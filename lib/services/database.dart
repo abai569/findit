@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 import '../models/item.dart';
 import '../models/location.dart';
 import '../models/item_category.dart';
@@ -10,6 +11,7 @@ class DatabaseService {
   DatabaseService._internal();
 
   Database? _database;
+  static const _uuid = Uuid();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -23,7 +25,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -33,25 +35,32 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE locations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT,
         name TEXT NOT NULL,
         parent_id INTEGER,
-        sort_order INTEGER DEFAULT 0
+        sort_order INTEGER DEFAULT 0,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
     await db.execute('''
       CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT,
         name TEXT NOT NULL,
         icon TEXT NOT NULL,
         color TEXT NOT NULL,
-        sort_order INTEGER DEFAULT 0
+        sort_order INTEGER DEFAULT 0,
+        updated_at TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
     await db.execute('''
       CREATE TABLE items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT,
         name TEXT NOT NULL,
         location_id INTEGER NOT NULL,
         category_id INTEGER,
@@ -95,14 +104,22 @@ class DatabaseService {
       {'name': '储物间', 'parent_id': null, 'sort_order': 7},
     ];
     for (var loc in defaultLocations) {
-      await db.insert('locations', loc);
+      await db.insert('locations', {
+        ...loc,
+        'sync_id': _uuid.v4(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
     }
 
     final defaultCategories = ItemCategory.getDefaults();
     for (var index = 0; index < defaultCategories.length; index++) {
       await db.insert(
         'categories',
-        defaultCategories[index].copyWith(sortOrder: index).toMap(),
+        {
+          ...defaultCategories[index].copyWith(sortOrder: index).toMap(),
+          'sync_id': _uuid.v4(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
       );
     }
   }
@@ -118,29 +135,63 @@ class DatabaseService {
       );
       await db.execute('UPDATE categories SET sort_order = id');
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE locations ADD COLUMN sync_id TEXT');
+      await db.execute('ALTER TABLE locations ADD COLUMN updated_at TEXT');
+      await db.execute(
+        'ALTER TABLE locations ADD COLUMN is_deleted INTEGER DEFAULT 0',
+      );
+      await db.execute('ALTER TABLE categories ADD COLUMN sync_id TEXT');
+      await db.execute('ALTER TABLE categories ADD COLUMN updated_at TEXT');
+      await db.execute(
+        'ALTER TABLE categories ADD COLUMN is_deleted INTEGER DEFAULT 0',
+      );
+      await db.execute('ALTER TABLE items ADD COLUMN sync_id TEXT');
+      final now = DateTime.now().toUtc().toIso8601String();
+      for (final table in ['locations', 'categories', 'items']) {
+        final rows = await db.query(table, columns: ['id']);
+        for (final row in rows) {
+          final values = <String, Object?>{'sync_id': _uuid.v4()};
+          if (table != 'items') values['updated_at'] = now;
+          await db.update(
+            table,
+            values,
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+      }
+    }
   }
 
   Future<int> insertLocation(Location location) async {
     final db = await database;
     await _ensureUniqueLocationName(db, location.name, location.parentId);
     final map = location.toMap();
+    map['sync_id'] = _uuid.v4();
+    map['updated_at'] = DateTime.now().toUtc().toIso8601String();
     map['sort_order'] = await _nextSortOrder(db, 'locations');
     return await db.insert('locations', map);
   }
 
   Future<List<Location>> getAllLocations() async {
     final db = await database;
-    final maps = await db.query('locations', orderBy: 'sort_order, id');
+    final maps = await db.query(
+      'locations',
+      where: 'is_deleted = 0',
+      orderBy: 'sort_order, id',
+    );
     return maps.map((map) => Location.fromMap(map)).toList();
   }
 
   Future<void> reorderLocations(List<int> ids) async {
     final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
       for (var index = 0; index < ids.length; index++) {
         await txn.update(
           'locations',
-          {'sort_order': index},
+          {'sort_order': index, 'updated_at': now},
           where: 'id = ?',
           whereArgs: [ids[index]],
         );
@@ -158,7 +209,10 @@ class DatabaseService {
     );
     return db.update(
       'locations',
-      location.toMap(),
+      {
+        ...location.toMap(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [location.id],
     );
@@ -170,7 +224,7 @@ class DatabaseService {
       final items = await txn.query(
         'items',
         columns: ['id'],
-        where: 'location_id = ?',
+        where: 'location_id = ? AND is_deleted = 0',
         whereArgs: [id],
         limit: 1,
       );
@@ -180,14 +234,22 @@ class DatabaseService {
       final children = await txn.query(
         'locations',
         columns: ['id'],
-        where: 'parent_id = ?',
+        where: 'parent_id = ? AND is_deleted = 0',
         whereArgs: [id],
         limit: 1,
       );
       if (children.isNotEmpty) {
         throw Exception('该位置下还有子位置，不能删除');
       }
-      return txn.delete('locations', where: 'id = ?', whereArgs: [id]);
+      return txn.update(
+        'locations',
+        {
+          'is_deleted': 1,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     });
   }
 
@@ -197,7 +259,7 @@ class DatabaseService {
     int? parentId, {
     int? excludeId,
   }) async {
-    final whereParts = <String>['name = ?'];
+    final whereParts = <String>['name = ?', 'is_deleted = 0'];
     final whereArgs = <Object?>[name];
     if (parentId == null) {
       whereParts.add('parent_id IS NULL');
@@ -221,7 +283,7 @@ class DatabaseService {
 
   Future<int> insertItem(Item item) async {
     final db = await database;
-    return await db.insert('items', item.toMap());
+    return await db.insert('items', {...item.toMap(), 'sync_id': _uuid.v4()});
   }
 
   Future<int> updateItem(Item item) async {
@@ -237,8 +299,12 @@ class DatabaseService {
 
   Future<int> deleteItem(int id) async {
     final db = await database;
-    return await db.delete(
+    return await db.update(
       'items',
+      {
+        'is_deleted': 1,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -318,17 +384,22 @@ class DatabaseService {
 
   Future<List<ItemCategory>> getAllCategories() async {
     final db = await database;
-    final maps = await db.query('categories', orderBy: 'sort_order, id');
+    final maps = await db.query(
+      'categories',
+      where: 'is_deleted = 0',
+      orderBy: 'sort_order, id',
+    );
     return maps.map((map) => ItemCategory.fromMap(map)).toList();
   }
 
   Future<void> reorderCategories(List<int> ids) async {
     final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
       for (var index = 0; index < ids.length; index++) {
         await txn.update(
           'categories',
-          {'sort_order': index},
+          {'sort_order': index, 'updated_at': now},
           where: 'id = ?',
           whereArgs: [ids[index]],
         );
@@ -340,6 +411,8 @@ class DatabaseService {
     final db = await database;
     await _ensureUniqueCategoryName(db, category.name);
     final map = category.toMap();
+    map['sync_id'] = _uuid.v4();
+    map['updated_at'] = DateTime.now().toUtc().toIso8601String();
     map['sort_order'] = await _nextSortOrder(db, 'categories');
     return db.insert('categories', map);
   }
@@ -349,7 +422,10 @@ class DatabaseService {
     await _ensureUniqueCategoryName(db, category.name, excludeId: category.id);
     return db.update(
       'categories',
-      category.toMap(),
+      {
+        ...category.toMap(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [category.id],
     );
@@ -360,11 +436,22 @@ class DatabaseService {
     return db.transaction((txn) async {
       await txn.update(
         'items',
-        {'category_id': null},
+        {
+          'category_id': null,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
         where: 'category_id = ?',
         whereArgs: [id],
       );
-      return txn.delete('categories', where: 'id = ?', whereArgs: [id]);
+      return txn.update(
+        'categories',
+        {
+          'is_deleted': 1,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     });
   }
 
@@ -376,7 +463,9 @@ class DatabaseService {
     final existing = await db.query(
       'categories',
       columns: ['id'],
-      where: excludeId == null ? 'name = ?' : 'name = ? AND id != ?',
+      where: excludeId == null
+          ? 'name = ? AND is_deleted = 0'
+          : 'name = ? AND id != ? AND is_deleted = 0',
       whereArgs: excludeId == null ? [name] : [name, excludeId],
       limit: 1,
     );
@@ -388,6 +477,93 @@ class DatabaseService {
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM $table',
     );
     return result.first['next_order'] as int;
+  }
+
+  Future<List<Map<String, dynamic>>> getSyncRows(String table) async {
+    if (!const ['locations', 'categories', 'items'].contains(table)) {
+      throw ArgumentError.value(table, 'table');
+    }
+    final db = await database;
+    final rows = await db.query(table);
+    return rows.map(Map<String, dynamic>.from).toList();
+  }
+
+  Future<void> clearSyncData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('items');
+      await txn.delete('locations');
+      await txn.delete('categories');
+    });
+  }
+
+  Future<void> ensureSyncIds() async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.transaction((txn) async {
+      for (final table in ['locations', 'categories', 'items']) {
+        final rows = await txn.query(
+          table,
+          columns: ['id'],
+          where: 'sync_id IS NULL OR sync_id = ?',
+          whereArgs: [''],
+        );
+        for (final row in rows) {
+          final values = <String, Object?>{'sync_id': _uuid.v4()};
+          if (table != 'items') values['updated_at'] = now;
+          await txn.update(
+            table,
+            values,
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> applySyncRows({
+    required List<Map<String, dynamic>> locations,
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final row in locations) {
+        await _upsertSyncRow(txn, 'locations', row);
+      }
+      for (final row in categories) {
+        await _upsertSyncRow(txn, 'categories', row);
+      }
+      for (final row in items) {
+        await _upsertSyncRow(txn, 'items', row);
+      }
+    });
+  }
+
+  Future<void> _upsertSyncRow(
+    DatabaseExecutor db,
+    String table,
+    Map<String, dynamic> row,
+  ) async {
+    final existing = await db.query(
+      table,
+      columns: ['id'],
+      where: 'sync_id = ?',
+      whereArgs: [row['sync_id']],
+      limit: 1,
+    );
+    final values = Map<String, dynamic>.from(row)..remove('id');
+    if (existing.isEmpty) {
+      await db.insert(table, values);
+    } else {
+      await db.update(
+        table,
+        values,
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
+    }
   }
 
   Future<void> updateSyncMetadata({
