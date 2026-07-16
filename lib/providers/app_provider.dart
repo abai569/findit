@@ -54,17 +54,23 @@ class AppProvider with ChangeNotifier {
     required String name,
     required int locationId,
     int? categoryId,
-    String? imagePath,
+    List<String> imagePaths = const [],
+    String? notes,
   }) async {
     final item = Item(
       name: name,
       locationId: locationId,
       categoryId: categoryId,
-      imagePath: imagePath,
+      imagePaths: imagePaths,
+      notes: notes,
     );
     
     await _db.insertItem(item);
-    await loadAllData();
+    try {
+      await loadAllData();
+    } catch (e) {
+      debugPrint('刷新物品数据失败：$e');
+    }
     
     if (_hasWebDAVConfig) {
       try {
@@ -76,8 +82,32 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> updateItem(Item item) async {
+    Item? previousItem;
+    for (final existingItem in _items) {
+      if (existingItem.id == item.id) {
+        previousItem = existingItem;
+        break;
+      }
+    }
+
     await _db.updateItem(item);
-    await loadAllData();
+    try {
+      await loadAllData();
+    } catch (e) {
+      debugPrint('刷新物品数据失败：$e');
+    }
+
+    if (previousItem != null) {
+      final removedPaths = previousItem.imagePaths.toSet()
+        ..removeAll(item.imagePaths);
+      for (final path in removedPaths) {
+        try {
+          await _imageService.deleteImage(path);
+        } catch (e) {
+          debugPrint('删除旧图片失败：$e');
+        }
+      }
+    }
     
     if (_hasWebDAVConfig) {
       try {
@@ -89,8 +119,26 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> deleteItem(int id) async {
+    Item? deletedItem;
+    for (final item in _items) {
+      if (item.id == id) {
+        deletedItem = item;
+        break;
+      }
+    }
+
     await _db.deleteItem(id);
     await loadAllData();
+
+    if (deletedItem != null) {
+      for (final path in deletedItem.imagePaths) {
+        try {
+          await _imageService.deleteImage(path);
+        } catch (e) {
+          debugPrint('删除物品图片失败：$e');
+        }
+      }
+    }
     
     if (_hasWebDAVConfig) {
       try {

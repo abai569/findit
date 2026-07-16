@@ -23,8 +23,9 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -54,6 +55,8 @@ class DatabaseService {
         location_id INTEGER NOT NULL,
         category_id INTEGER,
         image_path TEXT,
+        image_paths TEXT,
+        notes TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         is_deleted INTEGER DEFAULT 0,
@@ -96,6 +99,13 @@ class DatabaseService {
 
     for (var cat in ItemCategory.getDefaults()) {
       await db.insert('categories', cat.toMap());
+    }
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE items ADD COLUMN image_paths TEXT');
+      await db.execute('ALTER TABLE items ADD COLUMN notes TEXT');
     }
   }
 

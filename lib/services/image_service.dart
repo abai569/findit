@@ -22,14 +22,24 @@ class ImageService {
     return File(image.path);
   }
 
-  Future<File?> pickImageFromGallery() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-    );
+  Future<List<File>> pickImagesFromGallery() async {
+    final images = await _picker.pickMultiImage();
+    return images.map((image) => File(image.path)).toList();
+  }
 
-    if (image == null) return null;
+  Future<String> saveImageBytes(List<int> bytes, String extension) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory('${appDir.path}/images');
+    if (!await imagesDir.exists()) {
+      await imagesDir.create(recursive: true);
+    }
 
-    return File(image.path);
+    final safeExtension = RegExp(r'^\.[a-zA-Z0-9]+$').hasMatch(extension)
+        ? extension.toLowerCase()
+        : '.jpg';
+    final file = File('${imagesDir.path}/${const Uuid().v4()}$safeExtension');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   Future<File?> compressImage(File imageFile) async {

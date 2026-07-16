@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
 import 'database.dart';
 import 'encryption_service.dart';
+import 'image_service.dart';
 
 class WebDAVService {
   static final WebDAVService _instance = WebDAVService._internal();
@@ -14,9 +14,11 @@ class WebDAVService {
   webdav.Client? _client;
   final DatabaseService _dbService = DatabaseService();
   final EncryptionService _encryption = EncryptionService();
+  final ImageService _imageService = ImageService();
 
   static const String _prefsKey = 'webdav_config';
   static const String _backupDir = '/findit_backups';
+  static const int _backupFormatVersion = 2;
 
   Future<void> saveCredentials({
     required String url,
@@ -95,7 +97,7 @@ class WebDAVService {
 
   Future<String> _generateBackupFileName(int version) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return 'findit_backup_v${version}_$timestamp.zip.enc';
+    return 'findit_backup_v${version}_$timestamp.json.enc';
   }
 
   Future<String> backup() async {
@@ -114,9 +116,36 @@ class WebDAVService {
       metadata['backup_time'] = DateTime.now().toIso8601String();
       metadata['last_sync_version'] = backupVersion;
 
+      final images = <String, dynamic>{};
+      final itemMaps = <Map<String, dynamic>>[];
+      var imageIndex = 0;
+      for (final item in items) {
+        final imageRefs = <String>[];
+        for (final imagePath in item.imagePaths) {
+          final file = File(imagePath);
+          if (!await file.exists()) {
+            throw Exception('照片文件不存在：$imagePath');
+          }
+
+          final imageRef = 'image_${imageIndex++}';
+          images[imageRef] = {
+            'extension': _fileExtension(imagePath),
+            'data': base64Encode(await file.readAsBytes()),
+          };
+          imageRefs.add(imageRef);
+        }
+
+        final itemMap = item.toMap();
+        itemMap['image_path'] = null;
+        itemMap['image_paths'] = jsonEncode(imageRefs);
+        itemMaps.add(itemMap);
+      }
+
       // Create JSON data
       final backupData = {
-        'items': items.map((i) => i.toMap()).toList(),
+        'format_version': _backupFormatVersion,
+        'items': itemMaps,
+        'images': images,
         'locations': locations.map((l) => l.toMap()).toList(),
         'categories': categories.map((c) => c.toMap()).toList(),
         'metadata': metadata,
@@ -178,40 +207,139 @@ class WebDAVService {
 
   Future<void> _importBackupData(List<int> encryptedBytes) async {
     final db = await _dbService.database;
+    final restoredImagePaths = <String>[];
+    final oldImagePaths = (await _dbService.getAllItems())
+        .expand((item) => item.imagePaths)
+        .toSet();
+    var databaseCommitted = false;
 
     try {
       final encrypted = utf8.decode(encryptedBytes, allowMalformed: true);
       final decrypted = _encryption.decrypt(encrypted);
       final backupData = jsonDecode(decrypted) as Map<String, dynamic>;
+      final formatVersion = backupData['format_version'] as int? ?? 1;
+      final images = backupData['images'] as Map<String, dynamic>? ?? {};
+      final restoredImages = <String, String>{};
 
-      await db.delete('items');
-      await db.delete('locations');
-      await db.delete('categories');
+      if (formatVersion >= 2) {
+        if (formatVersion != _backupFormatVersion) {
+          throw Exception('不支持的备份格式：$formatVersion');
+        }
+        for (final entry in images.entries) {
+          final imageData = Map<String, dynamic>.from(entry.value as Map);
+          final bytes = base64Decode(imageData['data'] as String);
+          final path = await _imageService.saveImageBytes(
+            bytes,
+            imageData['extension'] as String? ?? '.jpg',
+          );
+          restoredImages[entry.key] = path;
+          restoredImagePaths.add(path);
+        }
+      }
 
       final locations = backupData['locations'] as List? ?? [];
-      for (var loc in locations) {
-        await db.insert('locations', loc);
-      }
-
       final categories = backupData['categories'] as List? ?? [];
-      for (var cat in categories) {
-        await db.insert('categories', cat);
-      }
-
       final items = backupData['items'] as List? ?? [];
-      for (var item in items) {
-        await db.insert('items', item);
-      }
-
       final metadata = backupData['metadata'] as Map? ?? {};
-      await _dbService.updateSyncMetadata(
-        lastBackupTime: metadata['backup_time'] as String?,
-        lastSyncVersion: metadata['last_sync_version'] as int?,
-        deviceId: metadata['device_id'] as String?,
-      );
+      final referencedImageRefs = <String>{};
+      if (formatVersion >= 2) {
+        for (final rawItem in items) {
+          final item = Map<String, dynamic>.from(rawItem as Map);
+          referencedImageRefs.addAll(
+            _decodeStringList(item['image_paths'] as String?),
+          );
+        }
+        final missingRefs = referencedImageRefs
+            .where((ref) => !restoredImages.containsKey(ref))
+            .toList();
+        if (missingRefs.isNotEmpty) {
+          throw Exception('备份缺少照片文件：${missingRefs.join(', ')}');
+        }
+        final unusedRefs = restoredImages.keys
+            .where((ref) => !referencedImageRefs.contains(ref))
+            .toList();
+        if (unusedRefs.isNotEmpty) {
+          throw Exception('备份包含未关联的照片文件');
+        }
+      }
+      await db.transaction((txn) async {
+        await txn.delete('items');
+        await txn.delete('locations');
+        await txn.delete('categories');
+
+        for (final loc in locations) {
+          await txn.insert('locations', Map<String, dynamic>.from(loc as Map));
+        }
+
+        for (final cat in categories) {
+          await txn.insert('categories', Map<String, dynamic>.from(cat as Map));
+        }
+
+        for (final rawItem in items) {
+          final item = Map<String, dynamic>.from(rawItem as Map);
+          if (formatVersion >= 2) {
+            final refs = _decodeStringList(item['image_paths'] as String?);
+            final paths = refs
+                .map((ref) => restoredImages[ref])
+                .whereType<String>()
+                .toList();
+            item['image_path'] = paths.isEmpty ? null : paths.first;
+            item['image_paths'] = jsonEncode(paths);
+          }
+          await txn.insert('items', item);
+        }
+
+        final syncMetadata = {
+          'last_backup_time': metadata['backup_time'] as String?,
+          'last_sync_version': metadata['last_sync_version'] as int?,
+          'device_id': metadata['device_id'] as String?,
+        };
+        final existingMetadata = await txn.query('sync_metadata');
+        if (existingMetadata.isEmpty) {
+          await txn.insert('sync_metadata', syncMetadata);
+        } else {
+          await txn.update(
+            'sync_metadata',
+            syncMetadata,
+            where: 'id = ?',
+            whereArgs: [existingMetadata.first['id']],
+          );
+        }
+      });
+      databaseCommitted = true;
+
+      final newImagePaths = (await _dbService.getAllItems())
+          .expand((item) => item.imagePaths)
+          .toSet();
+      for (final path in oldImagePaths.difference(newImagePaths)) {
+        try {
+          await _imageService.deleteImage(path);
+        } catch (e) {
+          print('清理旧照片失败：$e');
+        }
+      }
     } catch (e) {
+      for (final path in restoredImagePaths) {
+        if (!databaseCommitted) {
+          try {
+            await _imageService.deleteImage(path);
+          } catch (_) {}
+        }
+      }
       throw Exception('导入数据失败：$e');
     }
+  }
+
+  String _fileExtension(String path) {
+    final normalizedPath = path.replaceAll('\\', '/');
+    final fileName = normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1);
+    final dotIndex = fileName.lastIndexOf('.');
+    return dotIndex <= 0 ? '.jpg' : fileName.substring(dotIndex);
+  }
+
+  List<String> _decodeStringList(String? encoded) {
+    if (encoded == null || encoded.isEmpty) return [];
+    return (jsonDecode(encoded) as List).whereType<String>().toList();
   }
 
   Future<List<String>> listBackups() async {

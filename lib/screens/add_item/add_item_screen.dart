@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,9 +19,11 @@ class AddItemScreen extends StatefulWidget {
 class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _notesController = TextEditingController();
   int? _selectedLocationId;
   int? _selectedCategoryId;
-  File? _imageFile;
+  final List<File> _imageFiles = [];
+  final Set<String> _pendingImagePaths = {};
   final _imageService = ImageService();
 
   bool get isEditing => widget.item != null;
@@ -30,17 +33,20 @@ class _AddItemScreenState extends State<AddItemScreen> {
     super.initState();
     if (widget.item != null) {
       _nameController.text = widget.item!.name;
+      _notesController.text = widget.item!.notes ?? '';
       _selectedLocationId = widget.item!.locationId;
       _selectedCategoryId = widget.item!.categoryId;
-      if (widget.item!.imagePath != null && widget.item!.imagePath!.isNotEmpty) {
-        _imageFile = File(widget.item!.imagePath!);
-      }
+      _imageFiles.addAll(widget.item!.imagePaths.map(File.new));
     }
   }
 
   @override
   void dispose() {
+    for (final path in _pendingImagePaths) {
+      unawaited(_deleteImage(path));
+    }
     _nameController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -80,6 +86,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   _buildLocationPicker(provider),
                   const SizedBox(height: 16),
                   _buildCategoryPicker(provider),
+                  const SizedBox(height: 16),
+                  _buildNotesField(),
                   const SizedBox(height: 32),
                   _buildSaveButton(provider),
                 ],
@@ -92,47 +100,121 @@ class _AddItemScreenState extends State<AddItemScreen> {
   }
 
   Widget _buildImageSection() {
-    return Center(
-      child: GestureDetector(
-        onTap: _showImageSourceDialog,
-        child: Container(
-          width: 200,
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.grey[300]!,
-              width: 2,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              '照片（可多选）',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
-          ),
-          child: _imageFile != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    _imageFile!,
-                    fit: BoxFit.cover,
+            IconButton.filledTonal(
+              onPressed: _showImageSourceDialog,
+              tooltip: '添加照片',
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_imageFiles.isEmpty)
+          InkWell(
+            onTap: _showImageSourceDialog,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!, width: 2),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 48,
+                    color: Colors.grey[400],
                   ),
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  const SizedBox(height: 8),
+                  Text(
+                    '拍照或从相册选择多张图片',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _imageFiles.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                return Stack(
                   children: [
-                    Icon(
-                      Icons.add_photo_alternate_outlined,
-                      size: 48,
-                      color: Colors.grey[400],
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        _imageFiles[index],
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          width: 120,
+                          height: 120,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '点击拍照或选择图片',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton.filled(
+                        onPressed: () {
+                          final removedImage = _imageFiles.removeAt(index);
+                          if (_pendingImagePaths.remove(removedImage.path)) {
+                            unawaited(_deleteImage(removedImage.path));
+                          }
+                          setState(() {});
+                        },
+                        tooltip: '删除照片',
+                        iconSize: 18,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 32,
+                          height: 32,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.close),
                       ),
                     ),
                   ],
                 ),
-        ),
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNotesField() {
+    return TextFormField(
+      controller: _notesController,
+      minLines: 3,
+      maxLines: 6,
+      decoration: const InputDecoration(
+        labelText: '备注（可选）',
+        hintText: '记录物品特征、使用说明等',
+        prefixIcon: Icon(Icons.notes_outlined),
+        alignLabelWithHint: true,
       ),
     );
   }
@@ -243,17 +325,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 _pickImage(ImageSource.gallery);
               },
             ),
-            if (_imageFile != null)
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('删除图片', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _imageFile = null;
-                  });
-                },
-              ),
           ],
         ),
       ),
@@ -262,18 +333,28 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      File? image;
       if (source == ImageSource.camera) {
-        image = await _imageService.pickImage();
-      } else {
-        image = await _imageService.pickImageFromGallery();
-      }
-
-      if (image != null) {
+        final image = await _imageService.pickImage();
+        if (image == null) return;
         final compressed = await _imageService.compressImage(image);
-        setState(() {
-          _imageFile = compressed ?? image;
-        });
+        final savedImage = compressed ?? image;
+        if (mounted) {
+          _pendingImagePaths.add(savedImage.path);
+          setState(() => _imageFiles.add(savedImage));
+        } else {
+          await _imageService.deleteImage(savedImage.path);
+        }
+      } else {
+        final images = await _imageService.pickImagesFromGallery();
+        for (final image in images) {
+          final compressed = await _imageService.compressImage(image) ?? image;
+          if (mounted) {
+            _pendingImagePaths.add(compressed.path);
+            setState(() => _imageFiles.add(compressed));
+          } else {
+            await _deleteImage(compressed.path);
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -302,7 +383,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
           name: _nameController.text.trim(),
           locationId: _selectedLocationId!,
           categoryId: _selectedCategoryId,
-          imagePath: _imageFile?.path,
+          clearCategory: _selectedCategoryId == null,
+          imagePaths: _imageFiles.map((image) => image.path).toList(),
+          notes: _notesController.text.trim(),
         );
         await provider.updateItem(updatedItem);
       } else {
@@ -310,9 +393,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
           name: _nameController.text.trim(),
           locationId: _selectedLocationId!,
           categoryId: _selectedCategoryId,
-          imagePath: _imageFile?.path,
+          imagePaths: _imageFiles.map((image) => image.path).toList(),
+          notes: _notesController.text.trim(),
         );
       }
+
+      _pendingImagePaths.clear();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -328,6 +414,14 @@ class _AddItemScreenState extends State<AddItemScreen> {
           SnackBar(content: Text('操作失败：$e')),
         );
       }
+    }
+  }
+
+  Future<void> _deleteImage(String path) async {
+    try {
+      await _imageService.deleteImage(path);
+    } catch (e) {
+      debugPrint('删除图片失败：$e');
     }
   }
 
