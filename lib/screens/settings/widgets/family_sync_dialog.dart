@@ -259,7 +259,7 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
     return Container(
       padding: const EdgeInsets.only(left: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: Theme.of(context).colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
