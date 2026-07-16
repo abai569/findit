@@ -9,7 +9,7 @@ import 'database.dart';
 import 'image_service.dart';
 
 class FamilySyncService {
-  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const _configuredSupabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const _familyIdKey = 'family_sync_family_id';
   static const _boundFamilyIdKey = 'family_sync_bound_family_id';
@@ -18,8 +18,16 @@ class FamilySyncService {
   final DatabaseService _db = DatabaseService();
   final ImageService _images = ImageService();
 
+  static String get supabaseUrl {
+    final uri = Uri.tryParse(_configuredSupabaseUrl.trim());
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return _configuredSupabaseUrl.trim();
+    }
+    return Uri(scheme: uri.scheme, host: uri.host).toString();
+  }
+
   static bool get isConfigured =>
-      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+      _configuredSupabaseUrl.trim().isNotEmpty && supabaseAnonKey.isNotEmpty;
   SupabaseClient get _client => Supabase.instance.client;
   User? get currentUser => isConfigured ? _client.auth.currentUser : null;
 
@@ -55,13 +63,21 @@ class FamilySyncService {
 
   Future<void> signUp(String email, String password) async {
     _requireConfigured();
-    await _client.auth.signUp(email: email, password: password);
+    try {
+      await _client.auth.signUp(email: email, password: password);
+    } on AuthException catch (error) {
+      throw Exception(_authErrorMessage(error));
+    }
   }
 
   Future<void> signIn(String email, String password) async {
     _requireConfigured();
-    await _client.auth.signInWithPassword(email: email, password: password);
-    await initializeFamily();
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+      await initializeFamily();
+    } on AuthException catch (error) {
+      throw Exception(_authErrorMessage(error));
+    }
   }
 
   Future<void> signOut() async {
@@ -347,5 +363,18 @@ class FamilySyncService {
 
   void _requireConfigured() {
     if (!isConfigured) throw Exception('Supabase 尚未配置');
+  }
+
+  String _authErrorMessage(AuthException error) {
+    final message = error.message.toLowerCase();
+    if (error.statusCode == '404' || message.contains('invalid path')) {
+      return 'Supabase 地址配置错误，请填写项目根地址，例如 https://项目ID.supabase.co';
+    }
+    if (message.contains('email not confirmed')) return '邮箱尚未确认，请先打开确认邮件';
+    if (message.contains('invalid login credentials')) return '邮箱或密码错误';
+    if (message.contains('already registered')) return '该邮箱已经注册，请直接登录';
+    if (message.contains('password')) return '密码不符合要求，请至少输入 6 位';
+    if (message.contains('email')) return '邮箱地址无效或暂时无法使用';
+    return '认证失败：${error.message}';
   }
 }

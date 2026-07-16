@@ -311,9 +311,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 final version = snapshot.hasError
                     ? '未知'
                     : snapshot.data?.version ?? '读取中';
-                final buildNumber = snapshot.data?.buildNumber;
                 return Text(
-                  '版本：$version${buildNumber == null || buildNumber.isEmpty ? '' : '+$buildNumber'}',
+                  '版本：$version',
                   style: TextStyle(color: Colors.grey[600]),
                 );
               },

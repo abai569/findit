@@ -117,13 +117,16 @@ jobs:
         with:
           name: app-release
           path: ./release
+
+      - name: Rename APK
+        run: mv ./release/app-release.apk ./release/findit-v${{ needs.check-version.outputs.version }}.apk
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           name: ${{ env.APP_NAME }} v${{ needs.check-version.outputs.version }}
           tag_name: v${{ needs.check-version.outputs.version }}-${{ github.run_number }}
-          files: ./release/app-release.apk
+          files: ./release/findit-v${{ needs.check-version.outputs.version }}.apk
           generate_release_notes: true
           body: |
             ## 📱 ${{ env.APP_NAME }}
@@ -137,7 +140,7 @@ jobs:
             ${{ github.event.head_commit.message }}
             
             ### 安装说明
-            1. 下载 `app-release.apk`
+            1. 下载 `findit-v${{ needs.check-version.outputs.version }}.apk`
             2. 传输到 Android 手机
             3. 打开安装即可
             
