@@ -75,10 +75,11 @@ declare
   new_invite_code text;
 begin
   if auth.uid() is null then raise exception 'Not authenticated'; end if;
+  if trim(family_name) = '' then raise exception 'Family name is required'; end if;
   if exists (select 1 from public.family_members where user_id = auth.uid()) then
     raise exception 'User already belongs to a family';
   end if;
-  new_invite_code := upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8));
+  new_invite_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
   insert into public.families(name, invite_code, owner_id)
   values (trim(family_name), new_invite_code, auth.uid()) returning id into new_family_id;
   insert into public.family_members(family_id, user_id, role)

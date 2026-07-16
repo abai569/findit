@@ -88,25 +88,38 @@ class FamilySyncService {
 
   Future<String> createFamily(String name) async {
     await _requireUnboundDevice();
-    final result = await _client.rpc('create_family', params: {'family_name': name});
-    final data = Map<String, dynamic>.from(result as Map);
-    final familyId = data['family_id'] as String;
-    await _saveFamilyId(familyId);
-    await sync();
-    await _bindFamily(familyId);
-    return data['invite_code'] as String;
+    if (name.trim().isEmpty) throw Exception('请输入家庭名称');
+    try {
+      final result = await _client.rpc(
+        'create_family',
+        params: {'family_name': name.trim()},
+      );
+      final data = Map<String, dynamic>.from(result as Map);
+      final familyId = data['family_id'] as String;
+      await _saveFamilyId(familyId);
+      await sync();
+      await _bindFamily(familyId);
+      return data['invite_code'] as String;
+    } on PostgrestException catch (error) {
+      throw Exception(_databaseErrorMessage(error));
+    }
   }
 
   Future<void> joinFamily(String inviteCode) async {
     await _requireUnboundDevice();
-    final familyId = await _client.rpc(
-      'join_family',
-      params: {'code': inviteCode.trim().toUpperCase()},
-    );
-    await _saveFamilyId(familyId as String);
-    await _db.clearSyncData();
-    await sync();
-    await _bindFamily(familyId);
+    if (inviteCode.trim().isEmpty) throw Exception('请输入邀请码');
+    try {
+      final familyId = await _client.rpc(
+        'join_family',
+        params: {'code': inviteCode.trim().toUpperCase()},
+      );
+      await _saveFamilyId(familyId as String);
+      await _db.clearSyncData();
+      await sync();
+      await _bindFamily(familyId);
+    } on PostgrestException catch (error) {
+      throw Exception(_databaseErrorMessage(error));
+    }
   }
 
   Future<Map<String, dynamic>?> getFamily() async {
@@ -376,5 +389,16 @@ class FamilySyncService {
     if (message.contains('password')) return '密码不符合要求，请至少输入 6 位';
     if (message.contains('email')) return '邮箱地址无效或暂时无法使用';
     return '认证失败：${error.message}';
+  }
+
+  String _databaseErrorMessage(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    if (message.contains('gen_random_bytes')) {
+      return '家庭服务配置需要更新，请在 Supabase 重新执行最新版 schema.sql';
+    }
+    if (message.contains('already belongs')) return '该账号已经加入家庭';
+    if (message.contains('invalid invite code')) return '邀请码无效，请检查后重试';
+    if (message.contains('family name')) return '请输入有效的家庭名称';
+    return '家庭操作失败，请稍后重试';
   }
 }
