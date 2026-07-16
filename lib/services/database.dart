@@ -111,6 +111,7 @@ class DatabaseService {
 
   Future<int> insertLocation(Location location) async {
     final db = await database;
+    await _ensureUniqueLocationName(db, location.name, location.parentId);
     return await db.insert('locations', location.toMap());
   }
 
@@ -118,6 +119,77 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query('locations', orderBy: 'sort_order, id');
     return maps.map((map) => Location.fromMap(map)).toList();
+  }
+
+  Future<int> updateLocation(Location location) async {
+    final db = await database;
+    await _ensureUniqueLocationName(
+      db,
+      location.name,
+      location.parentId,
+      excludeId: location.id,
+    );
+    return db.update(
+      'locations',
+      location.toMap(),
+      where: 'id = ?',
+      whereArgs: [location.id],
+    );
+  }
+
+  Future<int> deleteLocation(int id) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final items = await txn.query(
+        'items',
+        columns: ['id'],
+        where: 'location_id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (items.isNotEmpty) {
+        throw Exception('该位置下还有物品，不能删除');
+      }
+      final children = await txn.query(
+        'locations',
+        columns: ['id'],
+        where: 'parent_id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (children.isNotEmpty) {
+        throw Exception('该位置下还有子位置，不能删除');
+      }
+      return txn.delete('locations', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> _ensureUniqueLocationName(
+    DatabaseExecutor db,
+    String name,
+    int? parentId, {
+    int? excludeId,
+  }) async {
+    final whereParts = <String>['name = ?'];
+    final whereArgs = <Object?>[name];
+    if (parentId == null) {
+      whereParts.add('parent_id IS NULL');
+    } else {
+      whereParts.add('parent_id = ?');
+      whereArgs.add(parentId);
+    }
+    if (excludeId != null) {
+      whereParts.add('id != ?');
+      whereArgs.add(excludeId);
+    }
+    final existing = await db.query(
+      'locations',
+      columns: ['id'],
+      where: whereParts.join(' AND '),
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+    if (existing.isNotEmpty) throw Exception('位置名称已存在');
   }
 
   Future<int> insertItem(Item item) async {
@@ -192,6 +264,51 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query('categories');
     return maps.map((map) => ItemCategory.fromMap(map)).toList();
+  }
+
+  Future<int> insertCategory(ItemCategory category) async {
+    final db = await database;
+    await _ensureUniqueCategoryName(db, category.name);
+    return db.insert('categories', category.toMap());
+  }
+
+  Future<int> updateCategory(ItemCategory category) async {
+    final db = await database;
+    await _ensureUniqueCategoryName(db, category.name, excludeId: category.id);
+    return db.update(
+      'categories',
+      category.toMap(),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+  }
+
+  Future<int> deleteCategory(int id) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      await txn.update(
+        'items',
+        {'category_id': null},
+        where: 'category_id = ?',
+        whereArgs: [id],
+      );
+      return txn.delete('categories', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> _ensureUniqueCategoryName(
+    DatabaseExecutor db,
+    String name, {
+    int? excludeId,
+  }) async {
+    final existing = await db.query(
+      'categories',
+      columns: ['id'],
+      where: excludeId == null ? 'name = ?' : 'name = ? AND id != ?',
+      whereArgs: excludeId == null ? [name] : [name, excludeId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) throw Exception('分类名称已存在');
   }
 
   Future<void> updateSyncMetadata({

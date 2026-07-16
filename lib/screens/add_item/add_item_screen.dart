@@ -172,6 +172,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
                         ),
                       ),
                     ),
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: () => _showImagePreview(_imageFiles[index]),
+                        behavior: HitTestBehavior.translucent,
+                      ),
+                    ),
                     Positioned(
                       top: 4,
                       right: 4,
@@ -423,6 +429,22 @@ class _AddItemScreenState extends State<AddItemScreen> {
     } catch (e) {
       debugPrint('删除图片失败：$e');
     }
+  }
+
+  void _showImagePreview(File image) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4,
+          child: Image.file(image, fit: BoxFit.contain),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteItem() async {

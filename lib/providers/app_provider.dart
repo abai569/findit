@@ -149,6 +149,59 @@ class AppProvider with ChangeNotifier {
     }
   }
 
+  Future<void> addLocation(String name) async {
+    await _db.insertLocation(Location(name: name.trim()));
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> updateLocation(Location location, String name) async {
+    await _db.updateLocation(location.copyWith(name: name.trim()));
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> deleteLocation(int id) async {
+    await _db.deleteLocation(id);
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> addCategory({
+    required String name,
+    required String icon,
+    required String color,
+  }) async {
+    await _db.insertCategory(
+      ItemCategory(name: name.trim(), icon: icon, color: color),
+    );
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> updateCategory(ItemCategory category, {
+    required String name,
+    required String icon,
+    required String color,
+  }) async {
+    await _db.updateCategory(
+      category.copyWith(name: name.trim(), icon: icon, color: color),
+    );
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> deleteCategory(int id) async {
+    await _db.deleteCategory(id);
+    await _refreshAfterStructureChange();
+  }
+
+  Future<void> _refreshAfterStructureChange() async {
+    await loadAllData();
+    if (_hasWebDAVConfig) {
+      try {
+        await _webdav.backup();
+      } catch (e) {
+        debugPrint('自动备份失败：$e');
+      }
+    }
+  }
+
   Future<void> searchItems(String keyword) async {
     if (keyword.isEmpty) {
       _items = await _db.getAllItems();

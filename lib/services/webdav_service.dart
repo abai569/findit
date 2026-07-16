@@ -128,9 +128,12 @@ class WebDAVService {
           }
 
           final imageRef = 'image_${imageIndex++}';
+          final backupImage = await _imageService.prepareBackupBytes(file);
           images[imageRef] = {
-            'extension': _fileExtension(imagePath),
-            'data': base64Encode(await file.readAsBytes()),
+            'extension': backupImage.compressed
+                ? '.jpg'
+                : _fileExtension(imagePath),
+            'data': base64Encode(backupImage.bytes),
           };
           imageRefs.add(imageRef);
         }

@@ -15,25 +15,18 @@ class LocationGrid extends StatelessWidget {
         if (locations.isEmpty) {
           return _buildGridItem(
             context,
-            icon: Icons.add_location_outlined,
             label: '添加位置',
             color: Colors.grey,
             onTap: null,
           );
         }
 
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1,
-          ),
-          itemCount: locations.length,
-          itemBuilder: (context, index) {
-            final location = locations[index];
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: locations.asMap().entries.map((entry) {
+            final index = entry.key;
+            final location = entry.value;
             final colors = [
               Colors.blue,
               Colors.green,
@@ -46,7 +39,6 @@ class LocationGrid extends StatelessWidget {
 
             return _buildGridItem(
               context,
-              icon: Icons.folder,
               label: location.name,
               color: color,
               onTap: () {
@@ -62,7 +54,7 @@ class LocationGrid extends StatelessWidget {
                 );
               },
             );
-          },
+          }).toList(),
         );
       },
     );
@@ -70,52 +62,29 @@ class LocationGrid extends StatelessWidget {
 
   Widget _buildGridItem(
     BuildContext context, {
-    required IconData icon,
     required String label,
     required Color color,
     VoidCallback? onTap,
   }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: onTap != null
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      color.withOpacity(0.1),
-                      color.withOpacity(0.05),
-                    ],
-                  )
-                : null,
+            color: (onTap != null ? color : Colors.grey).withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 32,
-                color: onTap != null ? color : Colors.grey,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: onTap != null ? color : Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: onTap != null ? color : Colors.grey,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
       ),
     );
   }

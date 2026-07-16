@@ -1,7 +1,7 @@
 name: wuping_guanjia
 description: 物品定位记录应用 - 记录物品位置，快速查找
 publish_to: 'none'
-version: 1.1.0+6
+version: 1.2.0+7
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -33,6 +33,7 @@ dependencies:
   shared_preferences: ^2.2.2
   uuid: ^4.2.1
   intl: ^0.18.1
+  package_info_plus: ^5.0.1
   
   # UI
   cupertino_icons: ^1.0.6

@@ -42,6 +42,37 @@ class ImageService {
     return file.path;
   }
 
+  Future<({List<int> bytes, bool compressed})> prepareBackupBytes(
+    File imageFile,
+  ) async {
+    final sourceSize = await imageFile.length();
+    if (sourceSize <= 450 * 1024) {
+      return (bytes: await imageFile.readAsBytes(), compressed: false);
+    }
+
+    final tempPath = '${imageFile.path}.${const Uuid().v4()}.backup.jpg';
+    try {
+      final result = await FlutterImageCompress.compressAndGetFile(
+        imageFile.absolute.path,
+        tempPath,
+        quality: 88,
+        minWidth: 1600,
+        minHeight: 1600,
+        format: CompressFormat.jpeg,
+      );
+      if (result != null) {
+        final bytes = await result.readAsBytes();
+        if (bytes.length <= sourceSize * 0.9) {
+          return (bytes: bytes, compressed: true);
+        }
+      }
+    } finally {
+      final tempFile = File(tempPath);
+      if (await tempFile.exists()) await tempFile.delete();
+    }
+    return (bytes: await imageFile.readAsBytes(), compressed: false);
+  }
+
   Future<File?> compressImage(File imageFile) async {
     final appDir = await getApplicationDocumentsDirectory();
     final imagesDir = Directory('${appDir.path}/images');

@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../providers/app_provider.dart';
 import 'widgets/webdav_config_dialog.dart';
 import 'widgets/backup_dialog.dart';
 import 'widgets/restore_dialog.dart';
+import 'data_management_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late final Future<PackageInfo> _packageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _packageInfo = PackageInfo.fromPlatform();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +40,9 @@ class SettingsScreen extends StatelessWidget {
               _buildBackupCard(context, provider),
               const SizedBox(height: 8),
               _buildRestoreCard(context, provider),
+              const SizedBox(height: 24),
+              _buildSectionHeader('数据管理'),
+              _buildDataManagementCard(context),
               const SizedBox(height: 24),
               _buildSectionHeader('统计信息'),
               _buildStatsCard(provider),
@@ -146,6 +164,23 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildDataManagementCard(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.tune)),
+        title: const Text('位置和分类管理'),
+        subtitle: const Text('自定义位置和分类'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const DataManagementScreen()),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildStatsCard(AppProvider provider) {
     final itemCount = provider.items.length;
     final locationCount = provider.locations.length;
@@ -236,11 +271,18 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '版本：1.0.0',
-              style: TextStyle(
-                color: Colors.grey[600],
-              ),
+            FutureBuilder<PackageInfo>(
+              future: _packageInfo,
+              builder: (context, snapshot) {
+                final version = snapshot.hasError
+                    ? '未知'
+                    : snapshot.data?.version ?? '读取中';
+                final buildNumber = snapshot.data?.buildNumber;
+                return Text(
+                  '版本：$version${buildNumber == null || buildNumber.isEmpty ? '' : '+$buildNumber'}',
+                  style: TextStyle(color: Colors.grey[600]),
+                );
+              },
             ),
             const SizedBox(height: 16),
             Text(
