@@ -94,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
@@ -105,8 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
             context.read<AppProvider>().loadAllData();
           });
         },
-        icon: const Icon(Icons.add),
-        label: const Text('添加物品'),
+        tooltip: '添加物品',
+        child: const Icon(Icons.add),
       ),
     );
   }

@@ -21,33 +21,36 @@ class ItemList extends StatelessWidget {
         }
 
         if (items.isEmpty) {
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.inventory_2_outlined,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '还没有物品记录',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 16,
+          return SizedBox(
+            width: double.infinity,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      size: 64,
+                      color: Colors.grey[400],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '点击右上角添加你的第一个物品',
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 14,
+                    const SizedBox(height: 16),
+                    Text(
+                      '还没有物品记录',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      '点击 + 添加你的第一个物品',
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
