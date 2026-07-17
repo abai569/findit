@@ -13,7 +13,8 @@ workflows:
       
       - name: Build APK
         script: |
-          flutter build apk --release
+          flutter build apk --release \
+            --dart-define=POCKETBASE_URL=$POCKETBASE_URL
     
     artifacts:
       - build/**/outputs/**/*.apk

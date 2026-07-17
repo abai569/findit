@@ -82,7 +82,7 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
     if (!FamilySyncService.isConfigured) {
       return AlertDialog(
         title: const Text('家庭同步'),
-        content: const Text('当前版本未配置 Supabase。构建时需要注入 SUPABASE_URL 和 SUPABASE_ANON_KEY。'),
+        content: const Text('当前版本未配置 PocketBase。构建时需要注入 POCKETBASE_URL。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
         ],
@@ -144,7 +144,7 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
         TextField(
           controller: _passwordController,
           obscureText: true,
-          decoration: const InputDecoration(labelText: '密码（至少 6 位）'),
+          decoration: const InputDecoration(labelText: '密码（至少 8 位）'),
         ),
         const SizedBox(height: 16),
         Row(
@@ -152,10 +152,13 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
             Expanded(
               child: FilledButton(
                 onPressed: () => _run(
-                  () => provider.familySync.signIn(
-                    _emailController.text.trim(),
-                    _passwordController.text,
-                  ),
+                  () async {
+                    await provider.familySync.signIn(
+                      _emailController.text.trim(),
+                      _passwordController.text,
+                    );
+                    await provider.loadAllData();
+                  },
                   successMessage: '登录成功',
                 ),
                 child: const Text('登录'),
@@ -215,7 +218,10 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () => _run(
-            () => provider.familySync.joinFamily(_inviteController.text),
+            () async {
+              await provider.familySync.joinFamily(_inviteController.text);
+              await provider.loadAllData();
+            },
             successMessage: '已加入家庭',
           ),
           icon: const Icon(Icons.group_add_outlined),
@@ -316,9 +322,7 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
 
   String _cleanError(Object error) {
     final message = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-    if (message.contains('PostgrestException')) return '家庭数据操作失败，请稍后重试';
-    if (message.contains('AuthException')) return '账号操作失败，请检查邮箱和密码';
-    if (message.contains('StorageException')) return '照片同步失败，请检查网络后重试';
+    if (message.contains('ClientException')) return '云端操作失败，请检查网络后重试';
     return message.isEmpty ? '操作失败，请稍后重试' : message;
   }
 }

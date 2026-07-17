@@ -39,6 +39,7 @@ class AppProvider with ChangeNotifier {
       _hasWebDAVConfig = await _webdav.hasCredentials();
       _backupHistory = await _db.getBackupHistory();
       await _familySync.initializeFamily();
+      await loadAllData();
     } catch (e) {
       _error = e.toString();
     } finally {

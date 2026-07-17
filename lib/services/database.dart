@@ -451,6 +451,7 @@ class DatabaseService {
         {
           'category_id': null,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'sync_dirty': 1,
         },
         where: 'category_id = ?',
         whereArgs: [id],
@@ -506,6 +507,28 @@ class DatabaseService {
       await txn.delete('items');
       await txn.delete('locations');
       await txn.delete('categories');
+    });
+  }
+
+  Future<void> replaceSyncData({
+    required List<Map<String, dynamic>> locations,
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('items');
+      await txn.delete('locations');
+      await txn.delete('categories');
+      for (final row in locations) {
+        await txn.insert('locations', row);
+      }
+      for (final row in categories) {
+        await txn.insert('categories', row);
+      }
+      for (final row in items) {
+        await txn.insert('items', row);
+      }
     });
   }
 

@@ -20,7 +20,7 @@
 - ✅ 加密存储（AES-256）
 - ✅ 保留最近 5 个版本
 - ✅ 一键恢复（换机同步）
-- ✅ 家庭成员云端同步（Supabase，可离线编辑后合并）
+- ✅ 家庭成员云端同步（PocketBase，可离线编辑后合并）
 
 ## 技术栈
 
@@ -30,13 +30,13 @@
 - **WebDAV**: webdav_client
 - **图片压缩**: flutter_image_compress
 - **加密**: encrypt (AES-256-CBC)
-- **家庭同步**: Supabase Auth / Database / Storage
+- **家庭同步**: PocketBase Auth / Database / Files
 
 ## 快速开始
 
 ### 环境要求
-- Flutter SDK >= 3.0.0
-- Dart >= 3.0.0
+- Flutter SDK >= 3.22.0
+- Dart >= 3.4.0
 - iOS 12.0+ / Android 5.0+
 
 ### 安装依赖
@@ -84,22 +84,20 @@ flutter build ios --release
 
 ## 家庭同步配置
 
-家庭同步使用 Supabase。首次配置需要在 Supabase SQL Editor 中执行
-`supabase/schema.sql`，然后在项目 Settings -> API 中取得 Project URL 和
-publishable/anon key。
+家庭同步使用自托管 PocketBase。PocketBase 需要配置 `users`、`families`、
+`family_members`、`locations`、`categories` 和 `items` 集合，并部署
+`pocketbase/pb_hooks` 中的 Hook 文件。详细部署要求见 `pocketbase/README.md`。
 
 本地运行时注入配置：
 
 ```bash
 flutter run \
-  --dart-define=SUPABASE_URL=https://你的项目.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=你的anon_key
+  --dart-define=POCKETBASE_URL=https://pb.example.com
 ```
 
 GitHub Actions 需要在仓库 Settings -> Secrets and variables -> Actions 中添加：
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+- `POCKETBASE_URL`
 
 安装配置后的 APK 后，在“设置 -> 家庭同步”中注册或登录。一个成员创建家庭后，
 把显示的邀请码发给其他成员，其他成员登录后输入邀请码即可加入。家庭成员的物品、

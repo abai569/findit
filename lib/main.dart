@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'providers/app_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
@@ -9,10 +8,7 @@ import 'services/family_sync_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (FamilySyncService.isConfigured) {
-    await Supabase.initialize(
-      url: FamilySyncService.supabaseUrl,
-      anonKey: FamilySyncService.supabaseAnonKey,
-    );
+    await FamilySyncService.initialize();
   }
   runApp(const FindItApp());
 }
