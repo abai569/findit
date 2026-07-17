@@ -42,16 +42,16 @@ class LocationGrid extends StatelessWidget {
               label: location.name,
               color: color,
               onTap: () {
-                provider.filterByLocation(location.id!);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => SearchScreen(
                       initialLocationId: location.id,
                       initialLocationName: location.name,
+                      autofocus: false,
                     ),
                   ),
-                );
+                ).then((_) => provider.loadAllData());
               },
             );
           }).toList(),

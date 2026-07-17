@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../models/item.dart';
 import '../add_item/add_item_screen.dart';
 import '../search/search_screen.dart';
 import 'widgets/item_list.dart';
@@ -15,32 +14,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final TextEditingController _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('物品管家'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SearchScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: Consumer<AppProvider>(
         builder: (context, provider, child) {
@@ -56,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSearchBar(provider),
+                  _buildSearchBar(),
                   const SizedBox(height: 24),
                   const Text(
                     '所有位置',
@@ -79,9 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {
-                          provider.loadAllData();
-                        },
+                        onPressed: () => _openSearch(autofocus: false),
                         child: const Text('查看全部'),
                       ),
                     ],
@@ -111,25 +87,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSearchBar(AppProvider provider) {
+  Widget _buildSearchBar() {
     return TextField(
-      controller: _searchController,
-      decoration: InputDecoration(
+      readOnly: true,
+      showCursor: false,
+      decoration: const InputDecoration(
         hintText: '搜索物品名称...',
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: _searchController.text.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  _searchController.clear();
-                  provider.loadAllData();
-                },
-              )
-            : null,
+        prefixIcon: Icon(Icons.search),
       ),
-      onChanged: (value) {
-        provider.searchItems(value);
-      },
+      onTap: _openSearch,
     );
+  }
+
+  Future<void> _openSearch({bool autofocus = true}) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SearchScreen(autofocus: autofocus),
+      ),
+    );
+    if (mounted) await context.read<AppProvider>().loadAllData();
   }
 }

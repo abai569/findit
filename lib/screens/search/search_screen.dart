@@ -8,11 +8,13 @@ import '../item_detail/item_detail_screen.dart';
 class SearchScreen extends StatefulWidget {
   final int? initialLocationId;
   final String? initialLocationName;
+  final bool autofocus;
 
   const SearchScreen({
     super.key,
     this.initialLocationId,
     this.initialLocationName,
+    this.autofocus = true,
   });
 
   @override
@@ -66,6 +68,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 padding: const EdgeInsets.all(16),
                 child: TextField(
                   controller: _searchController,
+                  autofocus: widget.autofocus,
                   decoration: InputDecoration(
                     hintText: '搜索物品名称...',
                     prefixIcon: const Icon(Icons.search),
@@ -74,12 +77,14 @@ class _SearchScreenState extends State<SearchScreen> {
                             icon: const Icon(Icons.clear),
                             onPressed: () {
                               _searchController.clear();
+                              setState(() {});
                               _refreshResults();
                             },
                           )
                         : null,
                   ),
                   onChanged: (value) {
+                    setState(() {});
                     _refreshResults();
                   },
                 ),
