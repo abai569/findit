@@ -69,114 +69,30 @@ class HomeAdBannerState extends State<HomeAdBanner> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: targetUri == null ? null : () => _openTarget(targetUri),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final bannerHeight =
-                  (constraints.maxWidth / 3).clamp(104.0, 180.0).toDouble();
-              final compact = bannerHeight < 130;
-              return SizedBox(
-                height: bannerHeight,
-                child: MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.4,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        ad.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted && _failedImageUrl != ad.imageUrl) {
-                              setState(() => _failedImageUrl = ad.imageUrl);
-                            }
-                          });
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [Color(0xB3000000), Color(0x12000000)],
-                            stops: [0, 0.8],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(compact ? 10 : 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildAdLabel(),
-                                  SizedBox(height: compact ? 3 : 5),
-                                  Text(
-                                    ad.title,
-                                    maxLines: compact ? 1 : 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  if (!compact && ad.subtitle.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      ad.subtitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xE6FFFFFF),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            if (targetUri != null &&
-                                !compact &&
-                                ad.buttonText.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x29FFFFFF),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  ad.buttonText,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              )
-                            else if (targetUri != null)
-                              Tooltip(
-                                message: ad.buttonText.isEmpty
-                                    ? '打开广告链接'
-                                    : ad.buttonText,
-                                child: const Icon(
-                                  Icons.arrow_forward_rounded,
-                                  color: Colors.white,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+          child: AspectRatio(
+            aspectRatio: 3,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  ad.imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && _failedImageUrl != ad.imageUrl) {
+                        setState(() => _failedImageUrl = ad.imageUrl);
+                      }
+                    });
+                    return const SizedBox.shrink();
+                  },
                 ),
-              );
-            },
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: _buildAdLabel(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -187,7 +103,7 @@ class HomeAdBannerState extends State<HomeAdBanner> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xB3FFFFFF)),
+        color: const Color(0x99000000),
         borderRadius: BorderRadius.circular(3),
       ),
       child: const Text(

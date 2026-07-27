@@ -5,26 +5,70 @@ import '../../models/location.dart';
 import '../../providers/app_provider.dart';
 
 class DataManagementScreen extends StatelessWidget {
-  const DataManagementScreen({super.key, this.initialIndex = 0});
-
-  final int initialIndex;
+  const DataManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      initialIndex: initialIndex,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('分类管理'),
-          bottom: const TabBar(
-            tabs: [Tab(text: '位置分类'), Tab(text: '物品分类')],
+    return Scaffold(
+      appBar: AppBar(title: const Text('分类管理')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: const Text('位置分类'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const _LocationManagementScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, indent: 56),
+                ListTile(
+                  leading: const Icon(Icons.category_outlined),
+                  title: const Text('物品分类'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const _CategoryManagementScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        body: const TabBarView(
-          children: [_LocationTab(), _CategoryTab()],
-        ),
+        ],
       ),
+    );
+  }
+}
+
+class _LocationManagementScreen extends StatelessWidget {
+  const _LocationManagementScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      appBar: AppBar(title: Text('位置分类')),
+      body: _LocationTab(),
+    );
+  }
+}
+
+class _CategoryManagementScreen extends StatelessWidget {
+  const _CategoryManagementScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      appBar: AppBar(title: Text('物品分类')),
+      body: _CategoryTab(),
     );
   }
 }
