@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -5,9 +7,10 @@ import '../../../models/ad_banner.dart';
 import '../../../services/ad_service.dart';
 
 class HomeAdBanner extends StatefulWidget {
-  const HomeAdBanner({super.key, this.placement = 'home_top'});
+  const HomeAdBanner({super.key, this.placement = 'home_top', this.carousel = false});
 
   final String placement;
+  final bool carousel;
 
   @override
   State<HomeAdBanner> createState() => HomeAdBannerState();
@@ -15,20 +18,27 @@ class HomeAdBanner extends StatefulWidget {
 
 class HomeAdBannerState extends State<HomeAdBanner> {
   final AdService _adService = AdService();
-  late Future<AdBanner?> _adFuture;
-  String? _failedImageUrl;
+  final PageController _pageController = PageController();
+  Timer? _carouselTimer;
+  late Future<dynamic> _adFuture;
+  int _currentPage = 0;
+  bool _isUserInteracting = false;
 
   @override
   void initState() {
     super.initState();
-    _adFuture = _adService.getAd(widget.placement);
+    _adFuture = widget.carousel
+        ? _adService.getAds(widget.placement)
+        : _adService.getAd(widget.placement);
   }
 
   Future<void> refresh() async {
-    final future = _adService.getAd(widget.placement, forceRefresh: true);
+    final future = widget.carousel
+        ? _adService.getAds(widget.placement, forceRefresh: true)
+        : _adService.getAd(widget.placement, forceRefresh: true);
     if (mounted) {
       setState(() {
-        _failedImageUrl = null;
+        _failedImageUrls.clear();
         _adFuture = future;
       });
     }
@@ -37,28 +47,124 @@ class HomeAdBannerState extends State<HomeAdBanner> {
 
   @override
   void dispose() {
+    _stopCarouselTimer();
+    _pageController.dispose();
     _adService.dispose();
     super.dispose();
   }
 
+  void _startCarouselTimer(int itemCount) {
+    _stopCarouselTimer();
+    if (itemCount <= 1) return;
+    _carouselTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (!mounted || _isUserInteracting) return;
+      final next = (_currentPage + 1) % itemCount;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  void _stopCarouselTimer() {
+    _carouselTimer?.cancel();
+    _carouselTimer = null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<AdBanner?>(
+    return FutureBuilder<dynamic>(
       future: _adFuture,
       builder: (context, snapshot) {
-        final ad = snapshot.data;
-        if (ad == null || ad.imageUrl == _failedImageUrl) {
-          return const SizedBox.shrink();
+        if (!widget.carousel) {
+          final ad = snapshot.data as AdBanner?;
+          if (ad == null || _failedImageUrls.contains(ad.imageUrl)) {
+            return const SizedBox.shrink();
+          }
+          return Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: _buildBanner(ad),
+          );
         }
+
+        final ads =
+            (snapshot.data as List<AdBanner>?)?.where((ad) => ad.isActiveAt(DateTime.now().toUtc())).toList() ?? [];
+        final validAds =
+            ads.where((ad) => !_failedImageUrls.contains(ad.imageUrl)).toList();
+        if (validAds.isEmpty) return const SizedBox.shrink();
+        if (validAds.length == 1) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: _buildBanner(validAds.first),
+          );
+        }
+
+        _startCarouselTimer(validAds.length);
         return Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: _buildBanner(context, ad),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: _bannerHeight(context),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollStartNotification &&
+                        notification.dragDetails != null) {
+                      setState(() => _isUserInteracting = true);
+                    } else if (notification is ScrollEndNotification) {
+                      setState(() => _isUserInteracting = false);
+                    }
+                    return false;
+                  },
+                  child: PageView.builder(
+                    controller: _pageController,
+                    onPageChanged: (page) {
+                      setState(() => _currentPage = page);
+                    },
+                    itemCount: validAds.length,
+                    itemBuilder: (context, index) =>
+                        _buildBanner(validAds[index]),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _buildDotIndicator(validAds.length),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildBanner(BuildContext context, AdBanner ad) {
+  double _bannerHeight(BuildContext context) {
+    final width = MediaQuery.of(context).size.width - 32;
+    return width / 3;
+  }
+
+  Widget _buildDotIndicator(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (index) {
+        final isActive = index == _currentPage;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: isActive ? 16 : 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: isActive
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey[300],
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildBanner(AdBanner ad) {
     final targetUri = ad.safeTargetUri;
     return Semantics(
       label: ['广告', ad.title, ad.subtitle]
@@ -81,8 +187,9 @@ class HomeAdBannerState extends State<HomeAdBanner> {
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted && _failedImageUrl != ad.imageUrl) {
-                        setState(() => _failedImageUrl = ad.imageUrl);
+                      if (mounted && !_failedImageUrls.contains(ad.imageUrl)) {
+                        setState(
+                            () => _failedImageUrls.add(ad.imageUrl));
                       }
                     });
                     return const SizedBox.shrink();
@@ -100,6 +207,8 @@ class HomeAdBannerState extends State<HomeAdBanner> {
       ),
     );
   }
+
+  final Set<String> _failedImageUrls = {};
 
   Widget _buildAdLabel() {
     return Container(

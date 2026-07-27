@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSearchBar(),
-                  HomeAdBanner(key: _adBannerKey),
+                  HomeAdBanner(key: _adBannerKey, carousel: true),
                   const SizedBox(height: 24),
                   const Text(
                     '所有位置',
