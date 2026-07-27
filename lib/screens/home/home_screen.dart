@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../add_item/add_item_screen.dart';
 import '../search/search_screen.dart';
+import 'widgets/home_ad_banner.dart';
 import 'widgets/item_list.dart';
 import 'widgets/location_grid.dart';
 
@@ -14,6 +17,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final _adBannerKey = GlobalKey<HomeAdBannerState>();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -27,7 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           return RefreshIndicator(
-            onRefresh: () => provider.loadAllData(),
+            onRefresh: () async {
+              final adRefresh = _adBannerKey.currentState?.refresh();
+              if (adRefresh != null) unawaited(adRefresh);
+              await provider.loadAllData();
+            },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
@@ -35,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSearchBar(),
+                  HomeAdBanner(key: _adBannerKey),
                   const SizedBox(height: 24),
                   const Text(
                     '所有位置',

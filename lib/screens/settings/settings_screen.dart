@@ -36,17 +36,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildSectionHeader('数据备份'),
-              _buildFamilySyncCard(context, provider),
-              const SizedBox(height: 8),
-              _buildWebDAVCard(context, provider),
-              const SizedBox(height: 8),
-              _buildBackupCard(context, provider),
-              const SizedBox(height: 8),
-              _buildRestoreCard(context, provider),
-              const SizedBox(height: 24),
               _buildSectionHeader('数据管理'),
-              _buildDataManagementCard(context),
+              _buildManagementCard(context, provider),
               const SizedBox(height: 24),
               _buildSectionHeader('统计信息'),
               _buildStatsCard(provider),
@@ -74,144 +65,171 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildWebDAVCard(BuildContext context, AppProvider provider) {
+  Widget _buildManagementCard(BuildContext context, AppProvider provider) {
     return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: provider.hasWebDAVConfig
-              ? Colors.green[100]
-              : Colors.grey[200],
-          child: Icon(
-            Icons.cloud,
-            color: provider.hasWebDAVConfig ? Colors.green : Colors.grey,
+      child: Column(
+        children: [
+          _buildGroupLabel('同步'),
+          _buildFamilySyncTile(context, provider),
+          const Divider(height: 1, indent: 56),
+          _buildGroupLabel('备份'),
+          _buildBackupTile(context, provider),
+          const Divider(height: 1, indent: 56),
+          _buildRestoreTile(context, provider),
+          const Divider(height: 1, indent: 56),
+          _buildWebDAVTile(context, provider),
+          const Divider(height: 1),
+          _buildGroupLabel('分类'),
+          _buildCategoryTile(
+            context,
+            title: '位置分类',
+            subtitle: '${provider.locations.length} 个位置',
+            icon: Icons.location_on_outlined,
+            initialIndex: 0,
           ),
-        ),
-        title: const Text('WebDAV 设置'),
-        subtitle: Text(
-          provider.hasWebDAVConfig ? '已配置' : '未配置',
-          style: TextStyle(
-            color: provider.hasWebDAVConfig ? Colors.green : Colors.grey,
+          const Divider(height: 1, indent: 56),
+          _buildCategoryTile(
+            context,
+            title: '物品分类',
+            subtitle: '${provider.categories.length} 个分类',
+            icon: Icons.category_outlined,
+            initialIndex: 1,
           ),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (context) => const WebDAVConfigDialog(),
-          );
-        },
+        ],
       ),
     );
   }
 
-  Widget _buildFamilySyncCard(BuildContext context, AppProvider provider) {
+  Widget _buildGroupLabel(String label) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFamilySyncTile(BuildContext context, AppProvider provider) {
     final sync = provider.familySync;
     final status = !FamilySyncService.isConfigured
         ? '未配置云端'
         : sync.currentUser == null
             ? '未登录'
             : '已登录，可进行家庭同步';
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: sync.currentUser == null ? Colors.grey[200] : Colors.green[100],
-          child: Icon(
-            Icons.family_restroom,
-            color: sync.currentUser == null ? Colors.grey : Colors.green,
-          ),
-        ),
-        title: const Text('家庭同步'),
-        subtitle: Text(status),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () async {
-          await showDialog(
-            context: context,
-            builder: (_) => const FamilySyncDialog(),
-          );
-          if (mounted) setState(() {});
-        },
+    return ListTile(
+      leading: Icon(
+        Icons.family_restroom,
+        color: sync.currentUser == null ? Colors.grey : Colors.green,
       ),
+      title: const Text('家庭同步'),
+      subtitle: Text(status),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        await showDialog(
+          context: context,
+          builder: (_) => const FamilySyncDialog(),
+        );
+        if (mounted) setState(() {});
+      },
     );
   }
 
-  Widget _buildBackupCard(BuildContext context, AppProvider provider) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue[100],
-          child: const Icon(
-            Icons.backup,
-            color: Colors.blue,
-          ),
-        ),
-        title: const Text('立即备份'),
-        subtitle: const Text('备份数据到 WebDAV'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          if (!provider.hasWebDAVConfig) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('请先配置 WebDAV'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            return;
-          }
-          showDialog(
-            context: context,
-            builder: (context) => const BackupDialog(),
-          );
-        },
+  Widget _buildWebDAVTile(BuildContext context, AppProvider provider) {
+    return ListTile(
+      leading: Icon(
+        Icons.settings_outlined,
+        color: provider.hasWebDAVConfig ? Colors.green : Colors.grey,
       ),
+      title: const Text('同步设置'),
+      subtitle: Text(
+        provider.hasWebDAVConfig ? 'WebDAV 已配置' : '配置 WebDAV 备份服务',
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => const WebDAVConfigDialog(),
+        );
+      },
     );
   }
 
-  Widget _buildRestoreCard(BuildContext context, AppProvider provider) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.orange[100],
-          child: const Icon(
-            Icons.restore,
-            color: Colors.orange,
-          ),
-        ),
-        title: const Text('恢复数据'),
-        subtitle: const Text('从 WebDAV 恢复备份'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          if (!provider.hasWebDAVConfig) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('请先配置 WebDAV'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            return;
-          }
-          showDialog(
-            context: context,
-            builder: (context) => const RestoreDialog(),
+  Widget _buildBackupTile(BuildContext context, AppProvider provider) {
+    return ListTile(
+      leading: const Icon(Icons.backup_outlined),
+      title: const Text('立即备份'),
+      subtitle: const Text('备份数据到 WebDAV'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        if (!provider.hasWebDAVConfig) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请先配置 WebDAV'),
+              backgroundColor: Colors.orange,
+            ),
           );
-        },
-      ),
+          return;
+        }
+        showDialog(
+          context: context,
+          builder: (context) => const BackupDialog(),
+        );
+      },
     );
   }
 
-  Widget _buildDataManagementCard(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.tune)),
-        title: const Text('位置和分类管理'),
-        subtitle: const Text('自定义位置和分类'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const DataManagementScreen()),
+  Widget _buildRestoreTile(BuildContext context, AppProvider provider) {
+    return ListTile(
+      leading: const Icon(Icons.restore),
+      title: const Text('恢复数据'),
+      subtitle: const Text('从 WebDAV 恢复备份'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        if (!provider.hasWebDAVConfig) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请先配置 WebDAV'),
+              backgroundColor: Colors.orange,
+            ),
           );
-        },
-      ),
+          return;
+        }
+        showDialog(
+          context: context,
+          builder: (context) => const RestoreDialog(),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required int initialIndex,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DataManagementScreen(initialIndex: initialIndex),
+          ),
+        );
+      },
     );
   }
 

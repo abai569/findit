@@ -197,22 +197,18 @@ class AppProvider with ChangeNotifier {
 
   Future<void> addCategory({
     required String name,
-    required String icon,
-    required String color,
   }) async {
     await _db.insertCategory(
-      ItemCategory(name: name.trim(), icon: icon, color: color),
+      ItemCategory(name: name.trim(), icon: '📦', color: '#607D8B'),
     );
     await _refreshAfterStructureChange();
   }
 
   Future<void> updateCategory(ItemCategory category, {
     required String name,
-    required String icon,
-    required String color,
   }) async {
     await _db.updateCategory(
-      category.copyWith(name: name.trim(), icon: icon, color: color),
+      category.copyWith(name: name.trim()),
     );
     await _refreshAfterStructureChange();
   }

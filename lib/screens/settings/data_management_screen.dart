@@ -5,17 +5,20 @@ import '../../models/location.dart';
 import '../../providers/app_provider.dart';
 
 class DataManagementScreen extends StatelessWidget {
-  const DataManagementScreen({super.key});
+  const DataManagementScreen({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: initialIndex,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('位置和分类'),
+          title: const Text('分类管理'),
           bottom: const TabBar(
-            tabs: [Tab(text: '位置'), Tab(text: '分类')],
+            tabs: [Tab(text: '位置分类'), Tab(text: '物品分类')],
           ),
         ),
         body: const TabBarView(
@@ -144,9 +147,7 @@ class _CategoryTab extends StatelessWidget {
             .map(
               (entry) => ListTile(
                 key: ValueKey('category-${entry.value.id}'),
-                leading: Text(entry.value.icon, style: const TextStyle(fontSize: 24)),
                 title: Text(entry.value.name),
-                subtitle: Text(entry.value.color),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -193,29 +194,24 @@ class _CategoryTab extends StatelessWidget {
   }
 
   Future<void> _showCategoryDialog(
-    BuildContext context, [ItemCategory? category]
-  ) async {
+    BuildContext context, [
+    ItemCategory? category,
+  ]) async {
     final nameController = TextEditingController(text: category?.name ?? '');
-    final iconController = TextEditingController(text: category?.icon ?? '📦');
-    final colorController = TextEditingController(text: category?.color ?? '#607D8B');
-    final result = await showDialog<List<String>>(
+    final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(category == null ? '新增分类' : '编辑分类'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, maxLength: 30, decoration: const InputDecoration(labelText: '名称')),
-            TextField(controller: iconController, maxLength: 2, decoration: const InputDecoration(labelText: '图标')),
-            TextField(controller: colorController, decoration: const InputDecoration(labelText: '颜色，例如 #607D8B')),
-          ],
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          maxLength: 30,
+          decoration: const InputDecoration(labelText: '分类名称'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
           FilledButton(
-            onPressed: () => Navigator.pop(context, [
-              nameController.text.trim(), iconController.text.trim(), colorController.text.trim()
-            ]),
+            onPressed: () => Navigator.pop(context, nameController.text.trim()),
             child: const Text('保存'),
           ),
         ],
@@ -223,32 +219,14 @@ class _CategoryTab extends StatelessWidget {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       nameController.dispose();
-      iconController.dispose();
-      colorController.dispose();
     });
-    if (result == null || result[0].isEmpty || !context.mounted) return;
-    final color = result[2].toUpperCase();
-    if (!RegExp(r'^#[0-9A-F]{6}$').hasMatch(color)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('颜色格式应为 #RRGGBB，例如 #607D8B')),
-      );
-      return;
-    }
+    if (name == null || name.isEmpty || !context.mounted) return;
     final provider = context.read<AppProvider>();
     try {
       if (category == null) {
-        await provider.addCategory(
-          name: result[0],
-          icon: result[1].isEmpty ? '📦' : result[1],
-          color: color,
-        );
+        await provider.addCategory(name: name);
       } else {
-        await provider.updateCategory(
-          category,
-          name: result[0],
-          icon: result[1].isEmpty ? '📦' : result[1],
-          color: color,
-        );
+        await provider.updateCategory(category, name: name);
       }
     } catch (e) {
       if (context.mounted) {

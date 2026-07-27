@@ -121,7 +121,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           ...provider.categories.map((category) {
             return FilterChip(
-              label: Text('${category.icon} ${category.name}'),
+              label: Text(category.name),
               selected: _selectedCategoryId == category.id,
               onSelected: (selected) {
                 setState(() {
