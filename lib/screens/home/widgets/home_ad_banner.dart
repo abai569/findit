@@ -5,7 +5,9 @@ import '../../../models/ad_banner.dart';
 import '../../../services/ad_service.dart';
 
 class HomeAdBanner extends StatefulWidget {
-  const HomeAdBanner({super.key});
+  const HomeAdBanner({super.key, this.placement = 'home_top'});
+
+  final String placement;
 
   @override
   State<HomeAdBanner> createState() => HomeAdBannerState();
@@ -19,11 +21,11 @@ class HomeAdBannerState extends State<HomeAdBanner> {
   @override
   void initState() {
     super.initState();
-    _adFuture = _adService.getHomeAd();
+    _adFuture = _adService.getAd(widget.placement);
   }
 
   Future<void> refresh() async {
-    final future = _adService.getHomeAd(forceRefresh: true);
+    final future = _adService.getAd(widget.placement, forceRefresh: true);
     if (mounted) {
       setState(() {
         _failedImageUrl = null;

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/app_provider.dart';
 import '../../services/family_sync_service.dart';
+import '../home/widgets/home_ad_banner.dart';
 import 'data_management_screen.dart';
 import 'widgets/backup_dialog.dart';
 import 'widgets/family_sync_dialog.dart';
@@ -21,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
         builder: (context, provider, child) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const HomeAdBanner(placement: 'settings_top'),
             _buildStatsCard(provider),
             const SizedBox(height: 16),
             Card(

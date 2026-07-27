@@ -48,7 +48,7 @@ collection，并添加以下字段：
 
 ```text
 name: text，必填，最多 100 个字符
-placement: select，必填，单选值 (home_top)
+placement: select，必填，单选值 (home_top, settings_top)
 title: text，必填，最多 40 个字符
 subtitle: text，最多 80 个字符
 image: file，必填，单文件，最大 5242880 bytes
@@ -66,14 +66,21 @@ background_color: text，正则表达式 ^#[0-9A-Fa-f]{6}$
 Rule 和 View API Rule 都设置为：
 
 ```text
-placement = "home_top" && enabled = true && (starts_at = "" || starts_at <= @now) && (ends_at = "" || ends_at >= @now)
+enabled = true && (starts_at = "" || starts_at <= @now) && (ends_at = "" || ends_at >= @now)
 ```
 
 Create、Update 和 Delete API Rule 保持锁定，只允许 PocketBase 超级管理员维护
 广告。应用要求 PocketBase 地址使用 HTTPS，只会打开初始地址为 HTTPS 的广告链接，
-并从有效的 `home_top` 记录中选择 `priority` 最高的一条。横幅比例为 3:1，建议使用
+并从对应 placement 记录中选择 `priority` 最高的一条。横幅比例为 3:1，建议使用
 1200 x 400 图片。不需要点击跳转时，将 `target_url` 留空。由于图片允许未登录用户
 访问，禁用或下架广告后如果图片也不应继续公开访问，需要删除该记录或删除其图片。
+
+### 广告位列表
+
+| placement | 展示位置 |
+|-----------|----------|
+| `home_top` | 首页搜索栏下方 |
+| `settings_top` | 设置页顶部 |
 
 ## 必需的数据集合
 

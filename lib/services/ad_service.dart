@@ -10,9 +10,9 @@ import 'family_sync_service.dart';
 class AdService {
   AdService({http.Client? client}) : _client = client ?? http.Client();
 
-  static const _cacheKey = 'home_top_ad_cache';
-  static const _cacheTimeKey = 'home_top_ad_cache_time';
-  static const _cacheOriginKey = 'home_top_ad_cache_origin';
+  static const _cacheKeyPrefix = 'ad_cache';
+  static const _cacheTimeKeyPrefix = 'ad_cache_time';
+  static const _cacheOriginKeyPrefix = 'ad_cache_origin';
   static const _cacheDuration = Duration(minutes: 30);
   static const _maxStaleDuration = Duration(hours: 24);
   static const _requestTimeout = Duration(seconds: 8);
@@ -20,7 +20,17 @@ class AdService {
   final http.Client _client;
   int _requestId = 0;
 
-  Future<AdBanner?> getHomeAd({bool forceRefresh = false}) async {
+  String _cacheKey(String placement) => '$_cacheKeyPrefix:$placement';
+  String _cacheTimeKey(String placement) =>
+      '$_cacheTimeKeyPrefix:$placement';
+  String _cacheOriginKey(String placement) =>
+      '$_cacheOriginKeyPrefix:$placement';
+
+  Future<AdBanner?> getHomeAd({bool forceRefresh = false}) =>
+      getAd('home_top', forceRefresh: forceRefresh);
+
+  Future<AdBanner?> getAd(String placement,
+      {bool forceRefresh = false}) async {
     final baseUri = Uri.tryParse(FamilySyncService.pocketBaseUrl);
     if (baseUri == null || baseUri.scheme != 'https' || baseUri.host.isEmpty) {
       return null;
@@ -29,10 +39,11 @@ class AdService {
 
     final preferences = await SharedPreferences.getInstance();
     final cacheMatchesOrigin =
-        preferences.getString(_cacheOriginKey) == baseUrl;
-    final cached = cacheMatchesOrigin ? _readCache(preferences) : null;
+        preferences.getString(_cacheOriginKey(placement)) == baseUrl;
+    final cached =
+        cacheMatchesOrigin ? _readCache(preferences, placement) : null;
     final cachedAt = DateTime.tryParse(
-      preferences.getString(_cacheTimeKey) ?? '',
+      preferences.getString(_cacheTimeKey(placement)) ?? '',
     );
     final now = DateTime.now().toUtc();
     final cacheAge = cacheMatchesOrigin && cachedAt != null
@@ -49,15 +60,17 @@ class AdService {
 
     final requestId = ++_requestId;
     try {
-      final ad = await _fetchHomeAd(baseUrl);
+      final ad = await _fetchAd(placement, baseUrl);
       if (requestId == _requestId) {
         if (ad == null) {
-          await preferences.remove(_cacheKey);
+          await preferences.remove(_cacheKey(placement));
         } else {
-          await preferences.setString(_cacheKey, jsonEncode(ad.toJson()));
+          await preferences.setString(
+              _cacheKey(placement), jsonEncode(ad.toJson()));
         }
-        await preferences.setString(_cacheOriginKey, baseUrl);
-        await preferences.setString(_cacheTimeKey, now.toIso8601String());
+        await preferences.setString(_cacheOriginKey(placement), baseUrl);
+        await preferences.setString(
+            _cacheTimeKey(placement), now.toIso8601String());
       }
       return ad;
     } catch (_) {
@@ -69,9 +82,9 @@ class AdService {
     }
   }
 
-  Future<AdBanner?> _fetchHomeAd(String baseUrl) async {
+  Future<AdBanner?> _fetchAd(String placement, String baseUrl) async {
     final filter = [
-      'placement = "home_top"',
+      'placement = "$placement"',
       'enabled = true',
       '(starts_at = "" || starts_at <= @now)',
       '(ends_at = "" || ends_at >= @now)',
@@ -100,8 +113,8 @@ class AdService {
     return ad;
   }
 
-  AdBanner? _readCache(SharedPreferences preferences) {
-    final value = preferences.getString(_cacheKey);
+  AdBanner? _readCache(SharedPreferences preferences, String placement) {
+    final value = preferences.getString(_cacheKey(placement));
     if (value == null) return null;
     try {
       return AdBanner.fromJson(jsonDecode(value) as Map<String, dynamic>);
