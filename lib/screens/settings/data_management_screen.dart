@@ -54,9 +54,9 @@ class _LocationManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: AppBar(title: Text('位置分类')),
-      body: _LocationTab(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('位置分类')),
+      body: const _LocationTab(),
     );
   }
 }
@@ -66,9 +66,9 @@ class _CategoryManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: AppBar(title: Text('物品分类')),
-      body: _CategoryTab(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('物品分类')),
+      body: const _CategoryTab(),
     );
   }
 }
