@@ -27,7 +27,7 @@ class LocationGrid extends StatelessWidget {
           crossAxisCount: 5,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 2.8,
+          childAspectRatio: 2.2,
           children: locations.asMap().entries.map((entry) {
             final index = entry.key;
             final location = entry.value;
@@ -74,6 +74,7 @@ class LocationGrid extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
+          alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: (onTap != null ? color : Colors.grey).withOpacity(0.12),
