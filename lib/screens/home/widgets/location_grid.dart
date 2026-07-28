@@ -21,9 +21,13 @@ class LocationGrid extends StatelessWidget {
           );
         }
 
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 5,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 2.8,
           children: locations.asMap().entries.map((entry) {
             final index = entry.key;
             final location = entry.value;
@@ -68,12 +72,12 @@ class LocationGrid extends StatelessWidget {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: (onTap != null ? color : Colors.grey).withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
             label,
