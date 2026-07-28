@@ -24,7 +24,7 @@ class LocationGrid extends StatelessWidget {
         return LayoutBuilder(
           builder: (context, constraints) {
             final spacing = 8.0;
-            final itemCount = 5;
+            final itemCount = 4;
             final itemWidth = (constraints.maxWidth - spacing * (itemCount - 1)) / itemCount;
             return Wrap(
               spacing: spacing,
