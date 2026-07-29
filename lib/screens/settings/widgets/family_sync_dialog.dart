@@ -1,23 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../providers/app_provider.dart';
 import '../../../services/family_sync_service.dart';
 
-class FamilySyncDialog extends StatefulWidget {
-  const FamilySyncDialog({super.key});
+class FamilySyncScreen extends StatefulWidget {
+  const FamilySyncScreen({super.key});
 
   @override
-  State<FamilySyncDialog> createState() => _FamilySyncDialogState();
+  State<FamilySyncScreen> createState() => _FamilySyncScreenState();
 }
 
-class _FamilySyncDialogState extends State<FamilySyncDialog> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _familyNameController = TextEditingController(text: '我的家庭');
-  final _inviteController = TextEditingController();
+class _FamilySyncScreenState extends State<FamilySyncScreen> {
   Map<String, dynamic>? _family;
+  bool _loading = true;
   bool _busy = false;
   String? _message;
   bool _messageIsError = false;
@@ -25,287 +22,439 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
   @override
   void initState() {
     super.initState();
-    _loadFamily();
+    _refreshFamily();
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _familyNameController.dispose();
-    _inviteController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadFamily() async {
-    final provider = context.read<AppProvider>();
-    if (provider.familySync.currentUser == null) return;
+  Future<void> _refreshFamily() async {
+    if (mounted) setState(() => _loading = true);
+    final sync = context.read<AppProvider>().familySync;
     try {
-      final family = await provider.familySync.getFamily();
+      final family = sync.currentUser == null ? null : await sync.getFamily();
       if (mounted) setState(() => _family = family);
-    } catch (_) {}
+    } catch (error) {
+      if (mounted) _setMessage(_cleanError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _run(
     Future<void> Function() action, {
-    String successMessage = '操作成功',
+    required String successMessage,
   }) async {
+    if (!mounted) return;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
       await action();
-      await _loadFamily();
-      if (mounted) {
-        setState(() {
-          _message = successMessage;
-          _messageIsError = false;
-        });
-      }
+      await _refreshFamily();
+      if (mounted) _setMessage(successMessage);
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _message = _cleanError(error);
-          _messageIsError = true;
-        });
-      }
+      if (mounted) _setMessage(_cleanError(error), isError: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  void _setMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    setState(() {
+      _message = message;
+      _messageIsError = isError;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<AppProvider>();
+    final provider = context.watch<AppProvider>();
     final sync = provider.familySync;
-    if (!FamilySyncService.isConfigured) {
-      return AlertDialog(
-        title: const Text('家庭同步'),
-        content: const Text('当前版本未配置 PocketBase。构建时需要注入 POCKETBASE_URL。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
-        ],
-      );
-    }
-
     final user = sync.currentUser;
-    return AlertDialog(
-      title: const Text('家庭同步'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return Scaffold(
+      appBar: AppBar(title: const Text('家庭同步')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (!FamilySyncService.isConfigured)
+            _buildMessageCard(
+              '当前版本未配置 PocketBase，无法使用家庭同步。',
+              isError: true,
+            )
+          else ...[
             if (_message != null) ...[
-              _buildMessage(),
+              _buildMessageCard(_message!, isError: _messageIsError),
               const SizedBox(height: 12),
             ],
-            if (_busy) ...[
+            if (_busy || _loading) ...[
               const LinearProgressIndicator(),
               const SizedBox(height: 12),
             ],
             IgnorePointer(
-              ignoring: _busy,
+              ignoring: _busy || _loading,
               child: Opacity(
-                opacity: _busy ? 0.6 : 1,
+                opacity: _busy || _loading ? 0.6 : 1,
                 child: user == null
-                    ? _buildAuthForm(provider)
+                    ? _buildSignedOutOptions(provider)
                     : _family == null
-                        ? _buildFamilyForm(provider)
-                        : _buildJoinedFamily(provider),
+                        ? _buildNoFamilyOptions(provider)
+                        : _buildJoinedOptions(provider),
               ),
             ),
           ],
-        ),
-      ),
-      actions: [
-        if (user != null)
-          TextButton(
-            onPressed: _busy
-                ? null
-                : () => _run(sync.signOut, successMessage: '已退出账号'),
-            child: const Text('退出账号'),
-          ),
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
-      ],
-    );
-  }
-
-  Widget _buildAuthForm(AppProvider provider) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: '邮箱'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: '密码（至少 8 位）'),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: () => _run(
-                  () async {
-                    await provider.familySync.signIn(
-                      _emailController.text.trim(),
-                      _passwordController.text,
-                    );
-                    await provider.loadAllData();
-                  },
-                  successMessage: '登录成功',
-                ),
-                child: const Text('登录'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _run(
-                  () => provider.familySync.signUp(
-                    _emailController.text.trim(),
-                    _passwordController.text,
-                  ),
-                  successMessage: '注册成功，请登录',
-                ),
-                child: const Text('注册'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFamilyForm(AppProvider provider) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text('创建新家庭，或输入成员发来的邀请码。'),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _familyNameController,
-          decoration: const InputDecoration(labelText: '家庭名称'),
-        ),
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          onPressed: () => _run(
-            () async {
-              await provider.familySync.createFamily(
-                _familyNameController.text.trim(),
-              );
-            },
-            successMessage: '家庭创建成功',
-          ),
-          icon: const Icon(Icons.home_work_outlined),
-          label: const Text('创建家庭'),
-        ),
-        const Divider(height: 28),
-        TextField(
-          controller: _inviteController,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(labelText: '邀请码'),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => _run(
-            () async {
-              await provider.familySync.joinFamily(_inviteController.text);
-              await provider.loadAllData();
-            },
-            successMessage: '已加入家庭',
-          ),
-          icon: const Icon(Icons.group_add_outlined),
-          label: const Text('加入家庭'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildJoinedFamily(AppProvider provider) {
-    final members = (_family?['members'] as List? ?? []);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '家庭名称：${_family?['name'] as String? ?? '家庭'}',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        _buildInviteCode(_family?['invite_code'] as String? ?? ''),
-        const SizedBox(height: 12),
-        Text('成员：${members.length} 人'),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => _run(
-              provider.syncFamily,
-              successMessage: '同步完成',
-            ),
-            icon: const Icon(Icons.sync),
-            label: const Text('立即同步'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInviteCode(String code) {
-    return Container(
-      padding: const EdgeInsets.only(left: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '邀请码：$code',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
-            tooltip: '复制邀请码',
-            onPressed: () => _copyInviteCode(code),
-            icon: const Icon(Icons.copy_outlined),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildMessage() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = _messageIsError ? colorScheme.error : Colors.green;
+  Widget _buildSignedOutOptions(AppProvider provider) {
+    return _buildOptionsCard([
+      ListTile(
+        leading: const Icon(Icons.login),
+        title: const Text('登录账号'),
+        subtitle: const Text('登录已有家庭同步账号'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showAuthDialog(provider, register: false),
+      ),
+      ListTile(
+        leading: const Icon(Icons.person_add_outlined),
+        title: const Text('注册账号'),
+        subtitle: const Text('创建新的家庭同步账号'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showAuthDialog(provider, register: true),
+      ),
+    ]);
+  }
+
+  Widget _buildNoFamilyOptions(AppProvider provider) {
+    final email = provider.familySync.currentUser?.getStringValue('email') ?? '';
+    return _buildOptionsCard([
+      ListTile(
+        leading: const Icon(Icons.home_work_outlined),
+        title: const Text('创建家庭'),
+        subtitle: const Text('创建一个新的共享家庭'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showCreateFamilyDialog(provider),
+      ),
+      ListTile(
+        leading: const Icon(Icons.group_add_outlined),
+        title: const Text('加入家庭'),
+        subtitle: const Text('使用邀请码加入已有家庭'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showJoinFamilyDialog(provider),
+      ),
+      ListTile(
+        leading: const Icon(Icons.manage_accounts_outlined),
+        title: const Text('账号信息'),
+        subtitle: Text(email),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showAccountDialog(provider),
+      ),
+    ]);
+  }
+
+  Widget _buildJoinedOptions(AppProvider provider) {
+    final members = _family?['members'] as List? ?? const [];
+    final inviteCode = _family?['invite_code'] as String? ?? '';
+    return _buildOptionsCard([
+      ListTile(
+        leading: const Icon(Icons.home_outlined),
+        title: const Text('家庭信息'),
+        subtitle: Text(_family?['name'] as String? ?? '家庭'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _showFamilyInfo,
+      ),
+      ListTile(
+        leading: const Icon(Icons.key_outlined),
+        title: const Text('邀请码'),
+        subtitle: Text(inviteCode),
+        trailing: const Icon(Icons.copy_outlined),
+        onTap: () => _copyInviteCode(inviteCode),
+      ),
+      ListTile(
+        leading: const Icon(Icons.groups_outlined),
+        title: const Text('家庭成员'),
+        subtitle: Text('${members.length} 人'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showMembers(members),
+      ),
+      ListTile(
+        leading: const Icon(Icons.sync),
+        title: const Text('立即同步'),
+        subtitle: const Text('同步位置、分类、物品和照片'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _run(
+          provider.syncFamily,
+          successMessage: '家庭数据同步完成',
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.manage_accounts_outlined),
+        title: const Text('账号管理'),
+        subtitle: Text(
+          provider.familySync.currentUser?.getStringValue('email') ?? '',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showAccountDialog(provider),
+      ),
+    ]);
+  }
+
+  Widget _buildOptionsCard(List<Widget> tiles) {
+    return Card(
+      child: Column(
+        children: [
+          for (var index = 0; index < tiles.length; index++) ...[
+            tiles[index],
+            if (index < tiles.length - 1)
+              const Divider(height: 1, indent: 56),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageCard(String message, {required bool isError}) {
+    final color = isError ? Theme.of(context).colorScheme.error : Colors.green;
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            _messageIsError ? Icons.error_outline : Icons.check_circle_outline,
+            isError ? Icons.error_outline : Icons.check_circle_outline,
             color: color,
           ),
           const SizedBox(width: 8),
-          Expanded(child: Text(_message!, style: TextStyle(color: color))),
+          Expanded(child: Text(message, style: TextStyle(color: color))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAuthDialog(
+    AppProvider provider, {
+    required bool register,
+  }) async {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(register ? '注册账号' : '登录账号'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: '邮箱'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '密码（至少 8 位）'),
+            ),
+            if (register) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '确认密码'),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(register ? '注册' : '登录'),
+          ),
+        ],
+      ),
+    );
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    final confirmation = confirmController.text;
+    emailController.dispose();
+    passwordController.dispose();
+    confirmController.dispose();
+    if (submitted != true) return;
+    if (!mounted) return;
+    if (register && password != confirmation) {
+      _setMessage('两次输入的密码不一致', isError: true);
+      return;
+    }
+    await _run(
+      () async {
+        if (register) {
+          await provider.familySync.signUp(email, password);
+        } else {
+          await provider.familySync.signIn(email, password);
+          await provider.loadAllData();
+        }
+      },
+      successMessage: register ? '注册成功，请登录' : '登录成功',
+    );
+  }
+
+  Future<void> _showCreateFamilyDialog(AppProvider provider) async {
+    final controller = TextEditingController(text: '我的家庭');
+    final submitted = await _showInputDialog(
+      title: '创建家庭',
+      label: '家庭名称',
+      controller: controller,
+      confirmText: '创建',
+    );
+    final name = controller.text.trim();
+    controller.dispose();
+    if (!submitted) return;
+    if (!mounted) return;
+    await _run(
+      () async {
+        await provider.familySync.createFamily(name);
+        await provider.loadAllData();
+      },
+      successMessage: '家庭创建成功',
+    );
+  }
+
+  Future<void> _showJoinFamilyDialog(AppProvider provider) async {
+    final controller = TextEditingController();
+    final submitted = await _showInputDialog(
+      title: '加入家庭',
+      label: '邀请码',
+      controller: controller,
+      confirmText: '加入',
+      capitalization: TextCapitalization.characters,
+    );
+    final code = controller.text.trim();
+    controller.dispose();
+    if (!submitted) return;
+    if (!mounted) return;
+    await _run(
+      () async {
+        await provider.familySync.joinFamily(code);
+        await provider.loadAllData();
+      },
+      successMessage: '已加入家庭',
+    );
+  }
+
+  Future<bool> _showInputDialog({
+    required String title,
+    required String label,
+    required TextEditingController controller,
+    required String confirmText,
+    TextCapitalization capitalization = TextCapitalization.none,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(title),
+            content: TextField(
+              controller: controller,
+              textCapitalization: capitalization,
+              decoration: InputDecoration(labelText: label),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(confirmText),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _showAccountDialog(AppProvider provider) async {
+    final email = provider.familySync.currentUser?.getStringValue('email') ?? '';
+    final signOut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('账号信息'),
+        content: Text('邮箱：$email'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('关闭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('退出登录'),
+          ),
+        ],
+      ),
+    );
+    if (signOut == true && mounted) {
+      await _run(
+        () async {
+          await provider.familySync.signOut();
+          await provider.loadAllData();
+        },
+        successMessage: '已退出账号',
+      );
+    }
+  }
+
+  Future<void> _showFamilyInfo() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('家庭信息'),
+        content: Text('家庭名称：${_family?['name'] as String? ?? '家庭'}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showMembers(List members) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('家庭成员'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: members.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, index) {
+              final member = Map<String, dynamic>.from(members[index] as Map);
+              return ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(member['role'] as String? ?? 'member'),
+                subtitle: Text(member['user'] as String? ?? ''),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
         ],
       ),
     );
@@ -313,11 +462,7 @@ class _FamilySyncDialogState extends State<FamilySyncDialog> {
 
   Future<void> _copyInviteCode(String code) async {
     await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    setState(() {
-      _message = '邀请码已复制';
-      _messageIsError = false;
-    });
+    if (mounted) _setMessage('邀请码已复制');
   }
 
   String _cleanError(Object error) {

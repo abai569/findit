@@ -28,16 +28,21 @@ class WebDAVService {
     required String password,
     String? backupDir,
   }) async {
+    final normalizedBackupDir = _normalizeBackupDir(backupDir);
     final prefs = await SharedPreferences.getInstance();
     final config = {
       'url': url,
       'username': username,
       'password': password,
-      if (backupDir != null) 'backup_dir': backupDir,
+      'backup_dir': normalizedBackupDir,
     };
     final encrypted = _encryption.encrypt(jsonEncode(config));
-    await prefs.setString(_prefsKey, encrypted);
-    _backupDir = backupDir ?? _defaultBackupDir;
+    final saved = await prefs.setString(_prefsKey, encrypted);
+    if (!saved) {
+      throw Exception('Failed to save WebDAV configuration');
+    }
+    _backupDir = normalizedBackupDir;
+    _client = null;
   }
 
   Future<Map<String, String>?> getCredentials() async {
@@ -48,7 +53,7 @@ class WebDAVService {
     try {
       final decrypted = _encryption.decrypt(encrypted);
       final config = jsonDecode(decrypted) as Map<String, dynamic>;
-      _backupDir = (config['backup_dir'] as String?) ?? _defaultBackupDir;
+      _backupDir = _normalizeBackupDir(config['backup_dir'] as String?);
       return {
         'url': config['url'] as String,
         'username': config['username'] as String,
@@ -69,9 +74,23 @@ class WebDAVService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
     _backupDir = _defaultBackupDir;
+    _client = null;
   }
 
   String get backupDir => _backupDir;
+
+  String _normalizeBackupDir(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return _defaultBackupDir;
+    final collapsed = trimmed.replaceAll(RegExp(r'/+'), '/');
+    if (collapsed == '/') return '/';
+    final withLeadingSlash = collapsed.startsWith('/') ? collapsed : '/$collapsed';
+    return withLeadingSlash.replaceFirst(RegExp(r'/+$'), '');
+  }
+
+  String _backupPath(String fileName) {
+    return _backupDir == '/' ? '/$fileName' : '$_backupDir/$fileName';
+  }
 
   Future<webdav.Client> getClient() async {
     if (_client != null) return _client!;
@@ -88,12 +107,27 @@ class WebDAVService {
     );
 
     try {
-      await _client!.mkdir(_backupDir);
+      if (_backupDir != '/') {
+        await _ensureBackupDirectory(_client!);
+      }
     } catch (e) {
       // Directory might already exist
     }
 
     return _client!;
+  }
+
+  Future<void> _ensureBackupDirectory(webdav.Client client) async {
+    final segments = _backupDir.split('/').where((part) => part.isNotEmpty);
+    var currentPath = '';
+    for (final segment in segments) {
+      currentPath = '$currentPath/$segment';
+      try {
+        await client.mkdir(currentPath);
+      } catch (_) {
+        await client.readDir(currentPath);
+      }
+    }
   }
 
   Future<void> resetClient() async {
@@ -126,7 +160,9 @@ class WebDAVService {
       };
       final syncLocations = await _dbService.getSyncRows('locations');
       final syncCategories = await _dbService.getSyncRows('categories');
-      final metadata = await _dbService.getSyncMetadata() ?? {};
+      final metadata = Map<String, dynamic>.from(
+        await _dbService.getSyncMetadata() ?? const <String, dynamic>{},
+      );
       
       metadata['backup_time'] = DateTime.now().toIso8601String();
       metadata['last_sync_version'] = backupVersion;
@@ -175,7 +211,7 @@ class WebDAVService {
       final fileBytes = utf8.encode(encryptedData);
 
       // Upload
-      await client.write('$_backupDir/$fileName', fileBytes);
+      await client.write(_backupPath(fileName), fileBytes);
 
       // Update metadata
       await _dbService.updateSyncMetadata(
@@ -218,7 +254,7 @@ class WebDAVService {
       throw Exception('备份文件名为空');
     }
 
-    final encryptedBytes = await client.read('$_backupDir/$fileName');
+    final encryptedBytes = await client.read(_backupPath(fileName));
     await _importBackupData(encryptedBytes);
 
     return '恢复成功';

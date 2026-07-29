@@ -23,52 +23,55 @@ class SettingsScreen extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             const HomeAdBanner(placement: 'settings_top'),
+            const SizedBox(height: 16),
             _buildStatsCard(provider),
             const SizedBox(height: 16),
             Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.tune),
-                    title: const Text('管理中心'),
-                    subtitle: const Text('备份与分类管理'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ManagementCenterScreen(),
-                      ),
-                    ),
+              child: ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('管理中心'),
+                subtitle: const Text('备份与分类管理'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ManagementCenterScreen(),
                   ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.family_restroom),
-                    title: const Text('家庭同步'),
-                    subtitle: Text(
-                      !FamilySyncService.isConfigured
-                          ? '未配置云端'
-                          : provider.familySync.currentUser == null
-                              ? '未登录'
-                              : '已登录',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => const FamilySyncDialog(),
-                    ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.family_restroom),
+                title: const Text('家庭同步'),
+                subtitle: Text(
+                  !FamilySyncService.isConfigured
+                      ? '未配置云端'
+                      : provider.familySync.currentUser == null
+                          ? '未登录'
+                          : '已登录',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const FamilySyncScreen(),
                   ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.info_outline),
-                    title: const Text('关于'),
-                    subtitle: const Text('版本与应用信息'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AboutScreen()),
-                    ),
-                  ),
-                ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('关于'),
+                subtitle: const Text('版本与应用信息'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutScreen()),
+                ),
               ),
             ),
           ],
@@ -140,6 +143,7 @@ class ManagementCenterScreen extends StatelessWidget {
                         provider,
                         () => showDialog(
                           context: context,
+                          barrierDismissible: false,
                           builder: (_) => const RestoreDialog(),
                         ),
                       ),
@@ -167,21 +171,42 @@ class ManagementCenterScreen extends StatelessWidget {
     );
   }
 
-  void _requireWebDAV(
+  Future<void> _requireWebDAV(
     BuildContext context,
     AppProvider provider,
     VoidCallback action,
-  ) {
+  ) async {
     if (provider.hasWebDAVConfig) {
       action();
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('请先配置 WebDAV'),
-        backgroundColor: Colors.orange,
+    final openConfig = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.cloud_off_outlined),
+        title: const Text('尚未配置 WebDAV'),
+        content: const Text('请先完成 WebDAV 配置，再使用备份或恢复功能。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('去配置'),
+          ),
+        ],
       ),
     );
+    if (openConfig == true && context.mounted) {
+      final configured = await showDialog<bool>(
+        context: context,
+        builder: (_) => const WebDAVConfigDialog(),
+      );
+      if (configured == true && context.mounted) {
+        action();
+      }
+    }
   }
 }
 
@@ -238,10 +263,30 @@ Widget _buildStatsCard(AppProvider provider) {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(Icons.inventory_2, '物品', provider.items.length),
-          _StatItem(Icons.location_on, '位置', provider.locations.length),
-          _StatItem(Icons.category, '分类', provider.categories.length),
-          _StatItem(Icons.backup, '备份', provider.backupHistory.length),
+          _StatItem(
+            Icons.inventory_2,
+            '物品',
+            provider.items.length,
+            const Color(0xFF2878B5),
+          ),
+          _StatItem(
+            Icons.location_on,
+            '位置',
+            provider.locations.length,
+            const Color(0xFF2E8B57),
+          ),
+          _StatItem(
+            Icons.category,
+            '分类',
+            provider.categories.length,
+            const Color(0xFFD97706),
+          ),
+          _StatItem(
+            Icons.backup,
+            '备份',
+            provider.backupHistory.length,
+            const Color(0xFF168A8A),
+          ),
         ],
       ),
     ),
@@ -249,24 +294,25 @@ Widget _buildStatsCard(AppProvider provider) {
 }
 
 class _StatItem extends StatelessWidget {
-  const _StatItem(this.icon, this.label, this.value);
+  const _StatItem(this.icon, this.label, this.value, this.color);
 
   final IconData icon;
   final String label;
   final int value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: Theme.of(context).colorScheme.primary),
+        Icon(icon, color: color),
         const SizedBox(height: 6),
         Text(
           '$value',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
+            color: color,
           ),
         ),
         const SizedBox(height: 2),

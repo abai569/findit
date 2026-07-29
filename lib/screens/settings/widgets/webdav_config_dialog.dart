@@ -17,6 +17,9 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   final _backupDirController = TextEditingController(text: '/findit_backups');
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isInitializing = true;
+  _ConfigStatus _status = _ConfigStatus.none;
+  String? _statusMessage;
 
   @override
   void initState() {
@@ -26,15 +29,19 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
 
   Future<void> _loadExistingConfig() async {
     final provider = context.read<AppProvider>();
-    
-    if (provider.hasWebDAVConfig) {
-      _urlController.text = '已配置';
-      _usernameController.text = '已保存';
-      _passwordController.text = '********';
-      final creds = await provider.getWebDAVCredentials();
-      if (creds != null && creds['backup_dir'] != null) {
-        _backupDirController.text = creds['backup_dir']!;
+    try {
+      if (provider.hasWebDAVConfig) {
+        final creds = await provider.getWebDAVCredentials();
+        if (!mounted || creds == null) return;
+        _urlController.text = creds['url'] ?? '';
+        _usernameController.text = creds['username'] ?? '';
+        _passwordController.text = creds['password'] ?? '';
+        if (creds['backup_dir'] != null) {
+          _backupDirController.text = creds['backup_dir']!;
+        }
       }
+    } finally {
+      if (mounted) setState(() => _isInitializing = false);
     }
   }
 
@@ -51,30 +58,39 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('WebDAV 配置'),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildUrlField(),
-              const SizedBox(height: 16),
-              _buildUsernameField(),
-              const SizedBox(height: 16),
-              _buildPasswordField(),
-              const SizedBox(height: 16),
-              _buildBackupDirField(),
-              const SizedBox(height: 8),
-              _buildHelpText(),
-            ],
+      content: IgnorePointer(
+        ignoring: _isInitializing || _isLoading,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_statusMessage != null) ...[
+                  _buildStatusMessage(),
+                  const SizedBox(height: 16),
+                ],
+                _buildUrlField(),
+                const SizedBox(height: 16),
+                _buildUsernameField(),
+                const SizedBox(height: 16),
+                _buildPasswordField(),
+                const SizedBox(height: 16),
+                _buildBackupDirField(),
+                const SizedBox(height: 8),
+                _buildHelpText(),
+              ],
+            ),
           ),
         ),
       ),
       actions: [
         if (context.watch<AppProvider>().hasWebDAVConfig)
           TextButton(
-            onPressed: () => _clearConfig(),
+            onPressed: (_isLoading || _isInitializing)
+                ? null
+                : () => _clearConfig(),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('清除配置'),
           ),
@@ -83,14 +99,20 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: _isLoading ? null : () => _saveConfig(),
+          onPressed: (_isLoading || _isInitializing)
+              ? null
+              : _status == _ConfigStatus.success
+                  ? () => Navigator.pop(context, true)
+                  : () => _saveConfig(),
           child: _isLoading
               ? const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('保存'),
+              : Text(
+                  _status == _ConfigStatus.success ? '完成' : '保存并测试',
+                ),
         ),
       ],
     );
@@ -99,15 +121,13 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   Widget _buildUrlField() {
     return TextFormField(
       controller: _urlController,
+      onChanged: (_) => _resetStatus(),
       decoration: const InputDecoration(
         labelText: 'WebDAV 服务器地址',
         hintText: 'https://dav.jianguoyun.com/dav',
         prefixIcon: Icon(Icons.cloud),
       ),
       validator: (value) {
-        if (context.read<AppProvider>().hasWebDAVConfig) {
-          return null;
-        }
         if (value == null || value.trim().isEmpty) {
           return '请输入 WebDAV 服务器地址';
         }
@@ -122,14 +142,12 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   Widget _buildUsernameField() {
     return TextFormField(
       controller: _usernameController,
+      onChanged: (_) => _resetStatus(),
       decoration: const InputDecoration(
         labelText: '用户名',
         prefixIcon: Icon(Icons.person_outline),
       ),
       validator: (value) {
-        if (context.read<AppProvider>().hasWebDAVConfig) {
-          return null;
-        }
         if (value == null || value.trim().isEmpty) {
           return '请输入用户名';
         }
@@ -141,6 +159,7 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   Widget _buildPasswordField() {
     return TextFormField(
       controller: _passwordController,
+      onChanged: (_) => _resetStatus(),
       obscureText: _obscurePassword,
       decoration: InputDecoration(
         labelText: '密码',
@@ -157,9 +176,6 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
         ),
       ),
       validator: (value) {
-        if (context.read<AppProvider>().hasWebDAVConfig) {
-          return null;
-        }
         if (value == null || value.trim().isEmpty) {
           return '请输入密码';
         }
@@ -171,13 +187,85 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   Widget _buildBackupDirField() {
     return TextFormField(
       controller: _backupDirController,
+      onChanged: (_) => _resetStatus(),
       decoration: const InputDecoration(
         labelText: '备份目录',
         hintText: '/findit_backups',
         prefixIcon: Icon(Icons.folder_outlined),
         helperText: '留空使用默认目录 /findit_backups',
       ),
+      validator: (value) {
+        final normalized = value?.trim() ?? '';
+        if (normalized.contains('\\')) {
+          return '目录请使用 / 分隔';
+        }
+        final segments = normalized.split('/');
+        if (segments.any((segment) => segment == '.' || segment == '..')) {
+          return '目录不能包含 . 或 ..';
+        }
+        return null;
+      },
     );
+  }
+
+  Widget _buildStatusMessage() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final (icon, foreground, background) = switch (_status) {
+      _ConfigStatus.testing => (
+          Icons.sync,
+          colorScheme.primary,
+          colorScheme.primaryContainer,
+        ),
+      _ConfigStatus.success => (
+          Icons.check_circle_outline,
+          Colors.green.shade800,
+          Colors.green.shade50,
+        ),
+      _ConfigStatus.warning => (
+          Icons.warning_amber,
+          Colors.orange.shade900,
+          Colors.orange.shade50,
+        ),
+      _ConfigStatus.error => (
+          Icons.error_outline,
+          colorScheme.error,
+          colorScheme.errorContainer,
+        ),
+      _ConfigStatus.none => (
+          Icons.info_outline,
+          colorScheme.onSurface,
+          colorScheme.surfaceContainerHighest,
+        ),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: foreground, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _statusMessage!,
+              style: TextStyle(color: foreground, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _resetStatus() {
+    if (_status == _ConfigStatus.none || _isLoading) return;
+    setState(() {
+      _status = _ConfigStatus.none;
+      _statusMessage = null;
+    });
   }
 
   Widget _buildHelpText() {
@@ -195,14 +283,14 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   }
 
   Future<void> _saveConfig() async {
-    if (!context.read<AppProvider>().hasWebDAVConfig) {
-      if (!_formKey.currentState!.validate()) {
-        return;
-      }
+    if (!_formKey.currentState!.validate()) {
+      return;
     }
 
     setState(() {
       _isLoading = true;
+      _status = _ConfigStatus.testing;
+      _statusMessage = '正在保存配置并测试连接...';
     });
 
     try {
@@ -219,41 +307,32 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
         final testSuccess = await provider.testWebDAVConnection();
         if (mounted) {
           if (testSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('WebDAV 配置成功，连接测试通过'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            Navigator.pop(context);
+            setState(() {
+              _status = _ConfigStatus.success;
+              _statusMessage = 'WebDAV 配置已保存，连接测试通过。';
+            });
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('配置已保存，但连接测试失败，请检查网络或凭证'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            Navigator.pop(context);
+            await provider.clearWebDAVConfig();
+            setState(() {
+              _status = _ConfigStatus.warning;
+              _statusMessage = '连接测试失败，配置未保存。请检查地址、用户名、密码和备份目录。';
+            });
           }
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('配置失败，请重试'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          setState(() {
+            _status = _ConfigStatus.error;
+            _statusMessage = '配置保存失败，请检查输入后重试。';
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('配置失败：$e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _status = _ConfigStatus.error;
+          _statusMessage = '配置失败：$e';
+        });
       }
     } finally {
       if (mounted) {
@@ -288,12 +367,9 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
       await context.read<AppProvider>().clearWebDAVConfig();
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已清除 WebDAV 配置'),
-          ),
-        );
       }
     }
   }
 }
+
+enum _ConfigStatus { none, testing, success, warning, error }
