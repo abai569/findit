@@ -17,22 +17,27 @@ class WebDAVService {
   final ImageService _imageService = ImageService();
 
   static const String _prefsKey = 'webdav_config';
-  static const String _backupDir = '/findit_backups';
+  static const String _defaultBackupDir = '/findit_backups';
   static const int _backupFormatVersion = 2;
+
+  String _backupDir = _defaultBackupDir;
 
   Future<void> saveCredentials({
     required String url,
     required String username,
     required String password,
+    String? backupDir,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final config = {
       'url': url,
       'username': username,
       'password': password,
+      if (backupDir != null) 'backup_dir': backupDir,
     };
     final encrypted = _encryption.encrypt(jsonEncode(config));
     await prefs.setString(_prefsKey, encrypted);
+    _backupDir = backupDir ?? _defaultBackupDir;
   }
 
   Future<Map<String, String>?> getCredentials() async {
@@ -43,10 +48,12 @@ class WebDAVService {
     try {
       final decrypted = _encryption.decrypt(encrypted);
       final config = jsonDecode(decrypted) as Map<String, dynamic>;
+      _backupDir = (config['backup_dir'] as String?) ?? _defaultBackupDir;
       return {
         'url': config['url'] as String,
         'username': config['username'] as String,
         'password': config['password'] as String,
+        'backup_dir': _backupDir,
       };
     } catch (e) {
       return null;
@@ -61,7 +68,10 @@ class WebDAVService {
   Future<void> clearCredentials() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
+    _backupDir = _defaultBackupDir;
   }
+
+  String get backupDir => _backupDir;
 
   Future<webdav.Client> getClient() async {
     if (_client != null) return _client!;

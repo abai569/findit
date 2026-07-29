@@ -4,53 +4,8 @@ import '../../models/item_category.dart';
 import '../../models/location.dart';
 import '../../providers/app_provider.dart';
 
-class DataManagementScreen extends StatelessWidget {
-  const DataManagementScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('分类管理')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.location_on_outlined),
-                  title: const Text('位置分类'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const _LocationManagementScreen(),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1, indent: 56),
-                ListTile(
-                  leading: const Icon(Icons.category_outlined),
-                  title: const Text('物品分类'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const _CategoryManagementScreen(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LocationManagementScreen extends StatelessWidget {
-  const _LocationManagementScreen();
+class LocationManagementScreen extends StatelessWidget {
+  const LocationManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +16,8 @@ class _LocationManagementScreen extends StatelessWidget {
   }
 }
 
-class _CategoryManagementScreen extends StatelessWidget {
-  const _CategoryManagementScreen();
+class CategoryManagementScreen extends StatelessWidget {
+  const CategoryManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

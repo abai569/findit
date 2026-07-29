@@ -14,6 +14,7 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
   final _urlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _backupDirController = TextEditingController(text: '/findit_backups');
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -25,12 +26,15 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
 
   Future<void> _loadExistingConfig() async {
     final provider = context.read<AppProvider>();
-    final creds = await provider.testWebDAVConnection().then((_) => null);
     
     if (provider.hasWebDAVConfig) {
       _urlController.text = '已配置';
       _usernameController.text = '已保存';
       _passwordController.text = '********';
+      final creds = await provider.getWebDAVCredentials();
+      if (creds != null && creds['backup_dir'] != null) {
+        _backupDirController.text = creds['backup_dir']!;
+      }
     }
   }
 
@@ -39,6 +43,7 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
     _urlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _backupDirController.dispose();
     super.dispose();
   }
 
@@ -58,6 +63,8 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
               _buildUsernameField(),
               const SizedBox(height: 16),
               _buildPasswordField(),
+              const SizedBox(height: 16),
+              _buildBackupDirField(),
               const SizedBox(height: 8),
               _buildHelpText(),
             ],
@@ -161,6 +168,18 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
     );
   }
 
+  Widget _buildBackupDirField() {
+    return TextFormField(
+      controller: _backupDirController,
+      decoration: const InputDecoration(
+        labelText: '备份目录',
+        hintText: '/findit_backups',
+        prefixIcon: Icon(Icons.folder_outlined),
+        helperText: '留空使用默认目录 /findit_backups',
+      ),
+    );
+  }
+
   Widget _buildHelpText() {
     return Text(
       '常用 WebDAV 服务:\n'
@@ -188,10 +207,12 @@ class _WebDAVConfigDialogState extends State<WebDAVConfigDialog> {
 
     try {
       final provider = context.read<AppProvider>();
+      final backupDir = _backupDirController.text.trim();
       final success = await provider.saveWebDAVConfig(
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
+        backupDir: backupDir.isEmpty ? null : backupDir,
       );
 
       if (success) {

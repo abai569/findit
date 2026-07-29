@@ -31,13 +31,30 @@ class SettingsScreen extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.tune),
                     title: const Text('管理中心'),
-                    subtitle: const Text('同步、备份与分类管理'),
+                    subtitle: const Text('备份与分类管理'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => const ManagementCenterScreen(),
                       ),
+                    ),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.family_restroom),
+                    title: const Text('家庭同步'),
+                    subtitle: Text(
+                      !FamilySyncService.isConfigured
+                          ? '未配置云端'
+                          : provider.familySync.currentUser == null
+                              ? '未登录'
+                              : '已登录',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => const FamilySyncDialog(),
                     ),
                   ),
                   const Divider(height: 1, indent: 56),
@@ -70,12 +87,6 @@ class ManagementCenterScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('管理中心')),
       body: Consumer<AppProvider>(
         builder: (context, provider, child) {
-          final sync = provider.familySync;
-          final syncStatus = !FamilySyncService.isConfigured
-              ? '未配置云端'
-              : sync.currentUser == null
-                  ? '未登录'
-                  : '已登录';
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -83,39 +94,67 @@ class ManagementCenterScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const Icon(Icons.family_restroom),
-                      title: const Text('家庭同步'),
-                      subtitle: Text(syncStatus),
+                      leading: const Icon(Icons.category_outlined),
+                      title: const Text('物品分类'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CategoryManagementScreen(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: const Icon(Icons.location_on_outlined),
+                      title: const Text('位置分类'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LocationManagementScreen(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: const Icon(Icons.backup_outlined),
+                      title: const Text('立即备份'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _requireWebDAV(
+                        context,
+                        provider,
+                        () => showDialog(
+                          context: context,
+                          builder: (_) => const BackupDialog(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: const Icon(Icons.restore),
+                      title: const Text('恢复数据'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _requireWebDAV(
+                        context,
+                        provider,
+                        () => showDialog(
+                          context: context,
+                          builder: (_) => const RestoreDialog(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    ListTile(
+                      leading: const Icon(Icons.settings_outlined),
+                      title: const Text('同步设置'),
+                      subtitle: Text(
+                        provider.hasWebDAVConfig ? 'WebDAV 已配置' : 'WebDAV 未配置',
+                      ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => showDialog(
                         context: context,
-                        builder: (_) => const FamilySyncDialog(),
-                      ),
-                    ),
-                    const Divider(height: 1, indent: 56),
-                    ListTile(
-                      leading: const Icon(Icons.cloud_outlined),
-                      title: const Text('数据备份'),
-                      subtitle: const Text('备份、恢复与同步设置'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DataBackupScreen(),
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1, indent: 56),
-                    ListTile(
-                      leading: const Icon(Icons.category_outlined),
-                      title: const Text('分类管理'),
-                      subtitle: const Text('位置分类与物品分类'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DataManagementScreen(),
-                        ),
+                        builder: (_) => const WebDAVConfigDialog(),
                       ),
                     ),
                   ],
@@ -124,70 +163,6 @@ class ManagementCenterScreen extends StatelessWidget {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class DataBackupScreen extends StatelessWidget {
-  const DataBackupScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('数据备份')),
-      body: Consumer<AppProvider>(
-        builder: (context, provider, child) => ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.backup_outlined),
-                    title: const Text('立即备份'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _requireWebDAV(
-                      context,
-                      provider,
-                      () => showDialog(
-                        context: context,
-                        builder: (_) => const BackupDialog(),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.restore),
-                    title: const Text('恢复数据'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _requireWebDAV(
-                      context,
-                      provider,
-                      () => showDialog(
-                        context: context,
-                        builder: (_) => const RestoreDialog(),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.settings_outlined),
-                    title: const Text('同步设置'),
-                    subtitle: Text(
-                      provider.hasWebDAVConfig ? 'WebDAV 已配置' : 'WebDAV 未配置',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => const WebDAVConfigDialog(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -288,7 +263,11 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '$value',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
         const SizedBox(height: 2),
         Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),

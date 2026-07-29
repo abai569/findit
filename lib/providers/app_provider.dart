@@ -304,12 +304,14 @@ class AppProvider with ChangeNotifier {
     required String url,
     required String username,
     required String password,
+    String? backupDir,
   }) async {
     try {
       await _webdav.saveCredentials(
         url: url,
         username: username,
         password: password,
+        backupDir: backupDir,
       );
       _hasWebDAVConfig = true;
       notifyListeners();
@@ -319,6 +321,10 @@ class AppProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<Map<String, String>?> getWebDAVCredentials() async {
+    return await _webdav.getCredentials();
   }
 
   Future<void> clearWebDAVConfig() async {
